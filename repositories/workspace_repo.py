@@ -67,3 +67,49 @@ def salvar_nova_workspace(nome, guid, descricao):
     )
     conn.commit()
     conn.close()
+
+def verificar_se_workspace_existe(nome_comercial):
+    """Verifica se já existe uma workspace com este nome exato."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Usa o COLLATE NOCASE para ignorar diferenças entre maiúsculas e minúsculas (ex: "Vendas" e "vendas")
+    cursor.execute("SELECT id_workspace FROM Workspace WHERE nome_comercial = ? COLLATE NOCASE", (nome_comercial,))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
+
+def atualizar_workspace(id_workspace, nome, descricao):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE Workspace 
+            SET nome_comercial = ?, descricao = ?
+            WHERE id_workspace = ?
+        """, (nome, descricao, id_workspace))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def excluir_workspace(id_workspace):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Remove os vínculos para não quebrar as chaves estrangeiras
+        cursor.execute("DELETE FROM Workspace_Usuarios WHERE id_workspace = ?", (id_workspace,))
+        cursor.execute("DELETE FROM Workspace_Dashboard WHERE id_workspace = ?", (id_workspace,))
+        
+        # 2. Remove a workspace em si
+        cursor.execute("DELETE FROM Workspace WHERE id_workspace = ?", (id_workspace,))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao excluir: {e}")
+        return False
+    finally:
+        conn.close()

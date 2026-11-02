@@ -11,18 +11,35 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Tabela de Usuários
+    # 1. Tabela de Usuários (Agora com senha)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Usuarios (
             id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
             codigo_ldap TEXT UNIQUE NOT NULL,
             nome TEXT NOT NULL,
             email TEXT NOT NULL,
+            senha TEXT NOT NULL, -- NOVA COLUNA
             papel INTEGER NOT NULL,
             data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
+    # MÁGICA DE SEGURANÇA: Verifica se a coluna senha já existe (para não quebrar bancos antigos)
+    try:
+        cursor.execute("ALTER TABLE Usuarios ADD COLUMN senha TEXT;")
+        print("[Migração] Coluna 'senha' injetada com sucesso no SQLite!")
+    except sqlite3.OperationalError:
+        pass
+
+    # INSERE O ADMIN PADRÃO (LOGIN: admin / SENHA: admin)
+    cursor.execute("SELECT COUNT(*) as qtd FROM Usuarios WHERE codigo_ldap = 'admin'")
+    if cursor.fetchone()['qtd'] == 0:
+        cursor.execute('''
+            INSERT INTO Usuarios (codigo_ldap, nome, email, senha, papel, data_criacao) 
+            VALUES ('admin', 'Administrador do Sistema', 'admin@empresa.com', 'admin', 127, datetime('now', 'localtime'))
+        ''')
+        print("[Banco de Dados] Usuário ADMIN padrão criado com sucesso (admin/admin).")
+
     # 2. Tabela de Workspaces
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Workspace (
@@ -47,12 +64,10 @@ def init_db():
         )
     ''')
     
-    # CORREÇÃO DE SEGURANÇA: Força a inserção da coluna se o banco antigo estiver teimoso na pasta
     try:
         cursor.execute("ALTER TABLE Dashboard ADD COLUMN tabelas_utilizadas TEXT;")
         print("[Migração] Coluna tabelas_utilizadas injetada com sucesso no SQLite!")
     except sqlite3.OperationalError:
-        # Se cair aqui, significa que a coluna já existia de fato no arquivo físico
         pass
 
     # 4. Relacionamento: Workspace x Usuários

@@ -117,40 +117,89 @@
 
 <!----------------------------------------------------->        
 <!----- ABA 3: CADASTRO DE USUÁRIO -------------------->
-        <div class="tab-content" id="tabUsuario">
-            <header class="content-header">
-                <h1>Cadastro de Usuário e Atribuição</h1>
-                <p>Gerencie o perfil do colaborador e vincule suas permissões de visualização.</p>
-            </header>
-            <div class="form-container">
-                <form id="formUsuario">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Código LDAP / Registro</label>
-                            <input type="text" placeholder="Ex: u123456" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Nome Completo</label>
-                            <input type="text" placeholder="Nome do colaborador" required>
-                        </div>
+<div class="tab-content" id="tabUsuario">
+    <header class="content-header" style="margin-bottom: 24px;">
+        <h1>Gestão de Usuários</h1>
+        <p>Gerencie o perfil do colaborador e vincule suas permissões de visualização.</p>
+    </header>
+
+    <!-- Sub-Abas para alternar entre Listar e Cadastrar -->
+    <div class="sub-nav">
+        <button id="subTabListarUser" class="btn-sub-tab active">Listar Usuários</button>
+        <button id="subTabNovoUser" class="btn-sub-tab">+ Cadastrar Novo</button>
+    </div>
+
+    <!-- SEÇÃO 1: LISTAGEM DE USUÁRIOS -->
+    <div id="secListarUser" class="sub-tab-content active">
+    <!-- Barra de Pesquisa -->
+    <div style="margin-bottom: 16px; display: flex; justify-content: flex-start;">
+        <input type="text" id="filtroBuscaUser" placeholder="🔍 Pesquisar por Nome ou LDAP..." 
+            oninput="filtrarTabelaUsuarios()"
+            style="width: 100%; max-width: 400px; padding: 10px 16px; border: 1px solid var(--border-color); 
+                    border-radius: var(--radius-md); font-size: 14px; outline: none; transition: all 0.2s ease;">
+    </div>
+
+    <!-- TABELA DE USUÁRIOS (O QUE ESTAVA FALTANDO) -->
+    <div class="table-container">
+        <table class="premium-table">
+            <thead>
+                <tr>
+                    <th>Nome Completo</th>
+                    <th>LDAP</th>
+                    <th>E-mail</th>
+                    <th style="text-align:right;">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyUsuarios">
+                <!-- O JavaScript vai injetar os dados aqui -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+    <!-- SEÇÃO 2: FORMULÁRIO DE CADASTRO -->
+    <div id="secNovoUser" class="sub-tab-content">
+        <div class="form-container">
+            <form id="formUsuario" onsubmit="salvarNovoUsuario(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Código LDAP / Registro</label>
+                        <input type="text" id="userLdap" placeholder="Ex: u123456" required>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>E-mail Corporativo</label>
-                            <input type="email" placeholder="nome@empresa.com" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Papel no Sistema (Role ID)</label>
-                            <select id="userRole">
-                                <option value="1">Consumidor Padrão (Visualizador)</option>
-                                <option value="127">Administrador de Governança (Papel 127)</option>
-                            </select>
-                        </div>
+                    <div class="form-group">
+                        <label>Nome Completo</label>
+                        <input type="text" id="userNome" placeholder="Nome do colaborador" required>
                     </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>E-mail Corporativo</label>
+                        <input type="email" id="userEmail" placeholder="nome@empresa.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Papel no Sistema (Role ID)</label>
+                        <select id="userRole">
+                            <option value="1">Consumidor Padrão (Visualizador)</option>
+                            <option value="127">Administrador de Governança (Papel 127)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- NOVO: Grade de Checkboxes de Workspaces -->
+                <div class="form-group">
+                    <label>Vincular Workspaces (Selecione os ambientes permitidos)</label>
+                    <div id="userWorkspaceGrid" class="grid-checkboxes">
+                        <!-- O JavaScript vai preencher com os checkboxes -->
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; margin-top: 24px;">
                     <button type="submit" class="btn-primary">Registrar e Vincular</button>
-                </form>
-            </div>
+                </div>
+            </form>
         </div>
+    </div>
+</div>
 
 <!----------------------------------------------------->      
 <!----- ABA 4: GESTÃO E AUDITORIA DE POWER BI --------->
@@ -331,8 +380,41 @@
             </div>
         </div>
     </div>
+    <!--------------- Fim trecho de exclusao ----------------->  
+    
+    <!-- Toast de Sucesso -->
+    <div class="toast-notification" id="toastSuccess">
+        <div class="toast-icon">✓</div>
+        <div class="toast-message" id="toastMessage">Operação realizada com sucesso!</div>
+    </div>
 
-    <!--------------- Fim trecho de exclusao ----------------->   
+    <!-- Toast de Erro -->
+    <div class="toast-notification toast-error" id="toastError">
+        <div class="toast-icon-error">!</div>
+        <div class="toast-message-error" id="toastErrorMessage">Ocorreu um erro.</div>
+    </div>
+
+    <!-- Modal de Exclusão de Workspace -->
+    <div class="custom-modal-overlay" id="deleteWsModal">
+        <div class="custom-modal-box">
+            <div class="modal-header-danger">
+                <h3>Excluir Workspace</h3>
+                <button class="btn-close-modal" onclick="document.getElementById('deleteWsModal').classList.remove('show')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-main); font-size:14px; line-height: 1.5;">
+                    Tem certeza que deseja excluir a workspace <strong id="deleteWsNome"></strong>?
+                </p>
+                <p style="color:#b91c1c; font-size:12px; margin-top:8px; font-weight: 500;">
+                    ⚠️ Atenção: Todos os vínculos de usuários e dashboards com este ambiente serão removidos permanentemente.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal-cancel" onclick="document.getElementById('deleteWsModal').classList.remove('show')">Cancelar</button>
+                <button class="btn-modal-confirm" id="btnConfirmDeleteWs">Sim, Excluir</button>
+            </div>
+        </div>
+    </div>
 
     <script src="../static/js/dashboard.js"></script>
 </body>

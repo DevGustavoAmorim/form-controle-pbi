@@ -602,7 +602,6 @@ body {
 }
 
 /* Bloco interno que divide as informações em duas colunas embaixo da linha */
-
 .audit-inline-container {
     padding: 24px 32px;
     display: flex;
@@ -1179,4 +1178,144 @@ body {
     font-size: 14px;
     font-weight: 500;
     color: #991b1b;            /* Texto vermelho escuro para leitura perfeita */
+}
+
+/* ==========================================================================
+   AJUSTES DE LAYOUT: AUDITORIA DA WORKSPACE (LADO A LADO)
+   ========================================================================== */
+
+/* 1. Força as duas seções (Dashboards e Usuários) a ficarem lado a lado */
+.audit-inline-container.audit-side-by-side {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 32px !important;
+}
+
+/* 2. Faz cada coluna ocupar exatamente metade do espaço */
+.audit-side-by-side .audit-inline-section {
+    flex: 1 1 50% !important;
+    width: 50% !important;
+    max-width: 50% !important;
+    min-width: 0 !important; /* Impede que nomes longos quebrem o layout */
+}
+
+/* 3. Ajusta os itens da lista para alinhar à esquerda, limpar o pontinho e colocar a sombra */
+.audit-side-by-side .audit-inline-list li {
+    justify-content: space-between !important;
+    text-align: left !important;
+    transition: all 0.2s ease !important;
+    margin-bottom: 6px !important;
+    padding: 8px 12px !important;
+}
+
+/* Remove o "pontinho" (bullet) global da lista */
+.audit-side-by-side .audit-inline-list li::before {
+    display: none !important;
+}
+
+/* Efeito hover (sombra cinza) nos itens ao passar o mouse */
+.audit-side-by-side .audit-inline-list li:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    border-color: #cbd5e1 !important;
+    transform: translateY(-1px) !important;
+}
+
+/* 4. Tamanho do scroll para mostrar exatamente 5 itens */
+.audit-side-by-side .audit-inline-list {
+    max-height: 235px !important;
+    overflow-y: auto !important;
+    padding-right: 8px !important;
+}
+
+/* Grade de Checkboxes do Formulário (2 colunas, 6 linhas visíveis) */
+.grid-checkboxes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    max-height: 230px; /* Altura para exatamente 6 itens */
+    overflow-y: auto;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+/* Auditoria - Botão da Workspace dentro do Usuário */
+.btn-ws-user-audit {
+    background-color: var(--primary-light);
+    color: var(--primary);
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.btn-ws-user-audit:hover {
+    background-color: #bae6fd;
+}
+
+/* Painel de Dashboards escondido dentro do Usuário */
+.ws-dashboards-panel {
+    display: none;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.ws-dashboards-panel.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+/* ==========================================================================
+   AJUSTES DE AUDITORIA DO USUÁRIO (AUMENTO DE FONTE)
+   ========================================================================== */
+
+/* Aumenta o título "Workspaces com Acesso" */
+.user-audit-row h4 {
+    font-size: 13px !important; 
+    font-weight: 700 !important;
+    letter-spacing: 0.8px !important;
+    margin-bottom: 16px !important;
+}
+
+/* Aumenta a fonte do botão que abre a Workspace */
+.btn-ws-user-audit {
+    font-size: 15px !important;
+    padding: 12px 16px !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+}
+
+/* Aumenta a fonte dos Dashboards internos */
+.ws-dashboards-panel {
+    font-size: 14px !important;
+    padding: 16px !important;
+    background-color: #f8fafc !important; /* Fundo levemente diferente para destacar */
+}
+
+/* Ajusta os itens da lista de dashboards */
+.ws-dashboards-panel ul li {
+    padding: 8px 0 !important;
+    border-bottom: 1px dashed #e2e8f0 !important;
+    font-size: 14px !important;
+    color: var(--text-main) !important;
+}
+
+/* Remove a borda do último item */
+.ws-dashboards-panel ul li:last-child {
+    border-bottom: none !important;
 }

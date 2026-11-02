@@ -206,3 +206,18 @@ def reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids):
     conn.commit()
     conn.close()
     return True
+
+def buscar_binario_por_id_versao(id_versao):
+    """Busca o arquivo BLOB físico e o nome do painel para fins de download."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT v.arquivo_pbix, v.numero_versao, d.nome_dashboard
+        FROM Dashboards_versao v
+        JOIN Dashboard d ON v.id_dashboard = d.id_dashboard
+        WHERE v.id_versao = ?
+    """
+    cursor.execute(query, (id_versao,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None

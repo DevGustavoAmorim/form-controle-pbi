@@ -35,9 +35,29 @@ def listar_todas_workspaces():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@api_blueprint.route('/api/workspaces', methods=['POST'])
+def criar_workspace():
+    try:
+        dados = request.get_json()
+        nome = dados.get('nome', '').strip() # Remove espaços extras
+        guid = dados.get('guid')
+        descricao = dados.get('descricao')
 
-# Reaproveitando o blueprint existente
-# api_blueprint = Blueprint('api', __name__)
+        if not nome or not guid:
+            return jsonify({"error": "Nome e GUID são obrigatórios."}), 400
+
+        # AQUI ESTÁ A VALIDAÇÃO: Verifica se o nome já existe
+        if workspace_repo.verificar_se_workspace_existe(nome):
+            return jsonify({"error": "Já existe uma workspace cadastrada com este nome."}), 400
+
+        # Se passou, salva no banco
+        workspace_repo.salvar_nova_workspace(nome, guid, descricao)
+        
+        return jsonify({"success": True, "message": "Workspace cadastrada com sucesso."}), 201
+    except Exception as e:
+        print(f"[ERRO] Falha ao cadastrar workspace: {e}")
+        return jsonify({"error": str(e)}), 500
+
 #####################################################
 ####
 ##      parte do PBI 
@@ -279,5 +299,126 @@ def verificar_existencia_painel(nome_painel):
             
         conn.close()
         return jsonify({"existe": False, "proxima_versao": "v1"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+from flask import send_file
+import io
+
+@api_blueprint.route('/api/dashboards/versao/download/<int:id_versao>', methods=['GET'])
+def download_binario_pbi(id_versao):
+    """Busca o arquivo BLOB no banco e disponibiliza para download automático."""
+    try:
+        # Busca os metadados e o arquivo binário direto do repositório
+        versao_dados = dashboard_repo.buscar_binario_por_id_versao(id_versao)
+        
+        if not versao_dados or not versao_dados.get('arquivo_pbix'):
+            return jsonify({"error": "O arquivo físico desta versão foi removido ou não existe."}), 404
+            
+        bytes_pbix = versao_dados['arquivo_pbix']
+        nome_arquivo = f"{versao_dados['nome_dashboard']}_{versao_dados['numero_versao']}.pbix"
+        
+        # Converte os bytes em um arquivo virtual em memória para o Flask conseguir despachar
+        return send_file(
+            io.BytesIO(bytes_pbix),
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=nome_arquivo
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+import repositories.usuario_repo as usuario_repo
+
+@api_blueprint.route('/api/usuarios', methods=['GET'])
+def listar_usuarios():
+    """Retorna a lista real de usuários do banco com suas workspaces e dashboards."""
+    try:
+        usuarios = usuario_repo.listar_todos_usuarios()
+        return jsonify(usuarios), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_blueprint.route('/api/usuarios', methods=['POST'])
+def criar_usuario():
+    """Recebe os dados do frontend e cadastra o usuário."""
+    try:
+        dados = request.get_json()
+        nome = dados.get('nome')
+        ldap = dados.get('ldap')
+        email = dados.get('email')
+        papel = dados.get('papel', 1)
+        workspaces_ids = dados.get('id_workspaces', [])
+
+        if not nome or not ldap:
+            return jsonify({"error": "Nome e LDAP são obrigatórios."}), 400
+
+        sucesso, resultado = usuario_repo.cadastrar_usuario(nome, ldap, email, papel, workspaces_ids)
+        
+        if sucesso:
+            return jsonify({"success": True, "id_usuario": resultado}), 201
+        else:
+            return jsonify({"error": resultado}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_blueprint.route('/api/usuarios/editar', methods=['POST'])
+def editar_usuario():
+    """Salva a edição do usuário e reestrutura os vínculos de workspace."""
+    try:
+        dados = request.get_json()
+        id_usuario = dados.get('id_usuario')
+        nome = dados.get('nome')
+        email = dados.get('email')
+        papel = dados.get('papel', 1)
+        workspaces_ids = dados.get('id_workspaces', [])
+
+        if not id_usuario or not nome:
+            return jsonify({"error": "ID e Nome são obrigatórios."}), 400
+
+        sucesso = usuario_repo.atualizar_usuario(id_usuario, nome, email, papel, workspaces_ids)
+        
+        if sucesso:
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Falha ao atualizar no banco."}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_blueprint.route('/api/workspaces/editar', methods=['POST'])
+def editar_workspace():
+    try:
+        dados = request.get_json()
+        id_workspace = dados.get('id_workspace')
+        nome = dados.get('nome')
+        descricao = dados.get('descricao')
+
+        if not id_workspace or not nome:
+            return jsonify({"error": "ID e Nome são obrigatórios."}), 400
+
+        if workspace_repo.atualizar_workspace(id_workspace, nome, descricao):
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Erro ao atualizar workspace."}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_blueprint.route('/api/workspaces/excluir', methods=['POST'])
+def excluir_workspace():
+    try:
+        dados = request.get_json()
+        id_workspace = dados.get('id_workspace')
+
+        if not id_workspace:
+            return jsonify({"error": "ID da workspace é obrigatório."}), 400
+
+        if workspace_repo.excluir_workspace(id_workspace):
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Erro ao excluir workspace."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
