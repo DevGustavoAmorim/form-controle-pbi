@@ -1,0 +1,219 @@
+/* Configurações Gerais e Paleta de Cores Pastel */
+:root {
+    --bg-left: #eef2f5;         /* Azul-acinzentado bem claro */
+    --bg-right: #ffffff;        /* Branco puro */
+    --text-main: #334155;       /* Azul-escuro acinzentado (Slate) */
+    --text-muted: #64748b;      /* Cinza-azulado para textos secundários */
+    --primary-blue: #7dd3fc;    /* Azul pastel destaque */
+    --accent-green: #a7f3d0;    /* Verde-menta pastel para botão */
+    --btn-hover: #34d399;       /* Verde para o hover */
+    --border-color: #cbd5e1;    /* Cor de borda suave */
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-color: var(--bg-right);
+}
+
+/* Lado Esquerdo: Descrição e Identidade */
+.left-side {
+    flex: 1;
+    background-color: var(--bg-left);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 60px;
+    color: var(--text-main);
+    border-right: 1px solid var(--border-color);
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo-icon {
+    width: 40px;
+    height: 40px;
+    background-color: var(--primary-blue);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: var(--text-main);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.logo-text {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.description-content {
+    max-width: 480px;
+    margin: auto 0;
+}
+
+.description-content h1 {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 20px;
+}
+
+.description-content p {
+    font-size: 16px;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.footer-team {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.team-name {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+/* Lado Direito: Formulário de Login */
+.right-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+}
+
+.login-box {
+    width: 100%;
+    max-width: 400px;
+}
+
+.login-header {
+    margin-bottom: 32px;
+}
+
+.login-header h2 {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 8px;
+}
+
+.login-header p {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-main);
+    margin-bottom: 8px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.2s ease;
+    background-color: #f8fafc;
+}
+
+.form-group input:focus {
+    border-color: #94a3b8;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(203, 213, 225, 0.4);
+}
+
+.btn-submit {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--accent-green);
+    color: var(--text-main);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.btn-submit:hover {
+    background-color: var(--btn-hover);
+}
+
+.btn-submit:active {
+    transform: scale(0.98);
+}
+
+/* Responsividade para Dispositivos Móveis */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+        overflow: auto;
+    }
+    .left-side {
+        padding: 40px 24px;
+        gap: 40px;
+    }
+    .description-content {
+        margin: 0;
+    }
+    .right-side {
+        padding: 40px 24px;
+        background-color: var(--bg-right);
+    }
+}
+
+/* Novas variáveis de cor pastel para erros */
+:root {
+    --error-pastel: #fca5a5;    /* Vermelho pastel suave para bordas */
+    --error-text: #b91c1c;      /* Vermelho escuro para leitura do texto */
+    --error-bg: #fef2f2;        /* Fundo avermelhado bem suave */
+}
+
+/* Estilo para o texto da mensagem de erro */
+.error-message {
+    display: block;
+    font-size: 12px;
+    color: var(--error-text);
+    margin-top: 6px;
+    font-weight: 500;
+    min-height: 16px; /* Evita que o layout "pule" quando o erro aparecer */
+}
+
+/* Classe que o JS vai aplicar no input quando estiver inválido */
+.form-group input.invalid {
+    border-color: var(--error-pastel);
+    background-color: var(--error-bg);
+}
+
+.form-group input.invalid:focus {
+    box-shadow: 0 0 0 3px rgba(252, 165, 165, 0.4);
+}

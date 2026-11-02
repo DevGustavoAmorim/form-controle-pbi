@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GestaPBI - Login</title>
+    <!-- Chamada para o CSS profissional externo -->
+    <link rel="stylesheet" href="../static/css/login.css">
+</head>
+<body>
+
+    <!-- LADO ESQUERDO: Descrição e Identidade -->
+    <section class="left-side">
+        <div class="logo-container">
+            <div class="logo-icon">BI</div>
+            <span class="logo-text">GestaPBI</span>
+        </div>
+
+        <div class="description-content">
+            <h1>Portal de Governança e Distribuição de Relatórios</h1>
+            <p>Centralize o controle de acessos aos seus painéis do Power BI. Monitore workspaces instalados, gerencie réplicas lógicas e acompanhe o versionamento e histórico de alterações em um único lugar, de forma simples e auditável.</p>
+        </div>
+
+        <div class="footer-team">
+            Desenvolvido por: <span class="team-name">Equipe de Governança de TI</span>
+        </div>
+    </section>
+
+    <!-- LADO DIREITO: Login -->
+    <section class="right-side">
+        <div class="login-box">
+            <div class="login-header">
+                <h2>Seja bem-vindo</h2>
+                <p>Insira suas credenciais para gerenciar e visualizar os painéis.</p>
+            </div>
+
+            <form id="loginForm" novalidate>
+                <div class="form-group">
+                    <label for="username">Usuário ou E-mail corporativo</label>
+                    <input type="text" id="username" placeholder="exemplo@empresa.com" required autocomplete="username">
+                    <span class="error-message" id="usernameError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+                    <span class="error-message" id="passwordError"></span>
+                </div>
+
+                <button type="submit" class="btn-submit">Acessar Plataforma</button>
+            </form>
+
+        </div>
+    </section>
+
+    <!-- Chamada para o Javascript externo no final do body para melhor performance -->
+    <script src="../static/js/login.js"></script>
+</body>
+</html>

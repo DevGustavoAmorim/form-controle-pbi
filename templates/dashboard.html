@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GestaPBI - Painel Administrativo</title>
+    <link rel="stylesheet" href="../static/css/dashboard.css">
+</head>
+<body>
+    <!-- Notificação Flutuante de Sucesso (Toast) -->
+    <div class="toast-notification" id="toastSuccess">
+        <span class="toast-icon">✓</span>
+        <span class="toast-message" id="toastMessage">Operação realizada com sucesso!</span>
+    </div>
+    <!-- Notificação Flutuante de Erro/Alerta (Toast Vermelho Pastel) -->
+    <div class="toast-notification toast-error" id="toastError">
+        <span class="toast-icon-error">✕</span>
+        <span class="toast-message-error" id="toastErrorMessage">Erro ao processar solicitação.</span>
+    </div>
+
+
+    <!-- SIDEBAR ESQUERDO SOFISTICADO -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-area">
+                <div class="logo-icon">GP</div>
+                <span class="logo-text">GestaPBI</span>
+            </div>
+            <button class="btn-close-sidebar" id="btnCloseSidebar" title="Esconder Menu">✕</button>
+        </div>
+
+        <div class="user-profile">
+            <div class="user-avatar">AD</div>
+            <div class="user-info">
+                <p class="user-name" id="userName">Carregando...</p>
+                <p class="user-code" id="userCode">LDAP: u123456</p>
+                <span class="user-badge" id="userBadge">Verificando...</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-menu">
+            <a href="#" class="menu-item active" id="menuHome">
+                <span class="menu-label">🏠 Início / Workspaces</span>
+            </a>
+            
+            <div class="menu-section admin-only" id="adminMenu">
+                <p class="section-title">Gestão de Cadastros</p>
+                <a href="#" class="menu-item" id="menuWorkspace">Cadastro de Workspace</a>
+                <a href="#" class="menu-item" id="menuUsuario">Cadastro de Usuário</a>
+                <a href="#" class="menu-item" id="menuPowerBI">Cadastro de PowerBI</a>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- ÁREA CENTRAL DE CONTEÚDO -->
+    <main class="main-content" id="mainContent">
+        <button class="btn-open-sidebar" id="btnOpenSidebar" title="Expandir Menu">☰</button>
+
+        <!-- ABA 1: HOME / WORKSPACES GRID -->
+        <div class="tab-content active" id="tabHome">
+            <header class="content-header">
+                <h1>Meus Workspaces Autorizados</h1>
+                <p>Selecione o ambiente para visualizar os painéis alocados.</p>
+            </header>
+            <section class="workspaces-grid" id="workspacesGrid">
+                <!-- Injetado via JS -->
+            </section>
+        </div>
+
+<!----------------------------------------------------->        
+<!------ ABA 2: CADASTRO DE WORKSPACES----------------->
+        <div class="tab-content" id="tabWorkspace">
+            <header class="content-header">
+                <h1>Gestão de Workspaces</h1>
+                <p>Cadastre novos ambientes ou expanda um existente para auditar relatórios e usuários vinculados.</p>
+            </header>
+
+            <!-- Sub-Abas Internas para Organização -->
+            <div class="sub-nav">
+                <button class="btn-sub-tab active" id="subTabListarWS">Workspaces Existentes</button>
+                <button class="btn-sub-tab" id="subTabNovoWS">+ Cadastrar Novo Workspace</button>
+            </div>
+
+            <!-- SEÇÃO A: LISTAGEM E AUDITORIA EMBAIXO (SEM GUID) -->
+            <div class="sub-tab-content active" id="secListarWS">
+                <div class="table-container">
+                    <table class="premium-table">
+                        <thead>
+                            <tr>
+                                <th>Workspace / Ambiente</th>
+                                <th style="text-align: right; padding-right: 24px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyWorkspaces">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SEÇÃO B: FORMULÁRIO DE CADASTRO (SEM CAMPO DE GUID) -->
+            <div class="sub-tab-content" id="secNovoWS">
+                <div class="form-container">
+                    <form id="formWorkspace">
+                        <div class="form-group">
+                            <label>Nome Comercial do Workspace</label>
+                            <input type="text" id="wsNomeComercial" placeholder="Ex: Workspace Comercial - Filial Sul" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Finalidade / Descrição Técnica</label>
+                            <textarea id="wsDescricao" rows="4" placeholder="Detalhes sobre os indicadores e objetivos deste ambiente..."></textarea>
+                        </div>
+                        <button type="submit" class="btn-primary">Salvar Workspace</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+<!----------------------------------------------------->        
+<!----- ABA 3: CADASTRO DE USUÁRIO -------------------->
+        <div class="tab-content" id="tabUsuario">
+            <header class="content-header">
+                <h1>Cadastro de Usuário e Atribuição</h1>
+                <p>Gerencie o perfil do colaborador e vincule suas permissões de visualização.</p>
+            </header>
+            <div class="form-container">
+                <form id="formUsuario">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Código LDAP / Registro</label>
+                            <input type="text" placeholder="Ex: u123456" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nome Completo</label>
+                            <input type="text" placeholder="Nome do colaborador" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>E-mail Corporativo</label>
+                            <input type="email" placeholder="nome@empresa.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Papel no Sistema (Role ID)</label>
+                            <select id="userRole">
+                                <option value="1">Consumidor Padrão (Visualizador)</option>
+                                <option value="127">Administrador de Governança (Papel 127)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary">Registrar e Vincular</button>
+                </form>
+            </div>
+        </div>
+
+<!----------------------------------------------------->      
+<!----- ABA 4: GESTÃO E AUDITORIA DE POWER BI --------->
+        <div class="tab-content" id="tabPowerBI">
+            <header class="content-header">
+                <h1>Hub de Governança e ALM - PowerBI</h1>
+                <p>Monitore os relatórios instalados, altere a versão vigente em produção e gerencie os commits físicos de arquivos.</p>
+            </header>
+
+            <!-- Sub-Abas Internas -->
+            <div class="sub-nav">
+                <button class="btn-sub-tab active" id="subTabListarBI">Relatórios e Versões</button>
+                <button class="btn-sub-tab" id="subTabNovoBI">+ Commit de Novo Relatório</button>
+            </div>
+
+            <!-- SEÇÃO A: LISTAGEM, BUSCA E AUDITORIA INLINE -->
+            <div class="sub-tab-content active" id="secListarBI">
+                <!-- Barra de Pesquisa por Texto -->
+                <div class="search-container" style="margin-bottom: 20px; max-width: 400px;">
+                    <input type="text" id="txtBuscaBI" placeholder="🔍 Digite o nome do painel para pesquisar..." style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:var(--radius-md);">
+                </div>
+
+                <div class="table-container">
+                    <table class="premium-table">
+                        <thead>
+                            <tr>
+                                <th>Nome Comercial do Painel</th>
+                                <th>Versão Vigente</th>
+                                <th>Último Commit</th>
+                                <th style="text-align: right; padding-right: 24px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyDashboards">
+                            <!-- Injetado dinamicamente via JS do SQLite -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SEÇÃO B: FORMULÁRIO DE COMMIT DE POWER BI (DESIGN REFINADO) -->
+            <div class="sub-tab-content" id="secNovoBI">
+                <div class="form-container">
+                    <form id="formPowerBI" enctype="multipart/form-data" novalidate>
+                        
+                        <!-- ÁREA DE DROPZONE PREMIUM (UPLOAD INDUSTRIAL) -->
+                        <div class="pbi-upload-dropzone" id="dropzoneArea">
+                            <label for="filePbix" class="dropzone-label">
+                                <div class="dropzone-icon-box">
+                                    <span class="dropzone-icon">📥</span>
+                                </div>
+                                <div class="dropzone-text-group">
+                                    <strong class="dropzone-title">Arraste ou selecione o arquivo do relatório (.pbix)</strong>
+                                    <span class="dropzone-subtitle">O sistema identificará o Nome Comercial, as fontes e gerará a próxima versão sequencial automática</span>
+                                </div>
+                                <input type="file" id="filePbix" accept=".pbix" required>
+                            </label>
+                            <div id="fileInfoArea" class="file-feedback-badge hidden">
+                                <span class="badge-icon">✓</span>
+                                <span id="fileInfoText" class="badge-text">Arquivo validado com sucesso</span>
+                            </div>
+                        </div>
+
+                        <!-- NOME COMERCIAL IDENTIFICADO AUTOMATICAMENTE -->
+                        <div class="form-group">
+                            <label for="biNomeComercial">Nome Comercial do Dashboard (Identificado pelo arquivo)</label>
+                            <input type="text" id="biNomeComercial" placeholder="Aguardando leitura do arquivo .pbix..." readonly class="input-readonly">
+                        </div>
+
+                        <!-- LINK DE EMBED DO FRAME -->
+                        <div class="form-group">
+                            <label for="biLinkEmbed">Link de Embed para Renderização (URL do Iframe Seguro)</label>
+                            <input type="url" id="biLinkEmbed" placeholder="https://powerbi.com..." required>
+                        </div>
+
+                        <!-- GRID DE METADADOS EXTRAÍDOS E DOCUMENTAÇÃO VISUAL -->
+                        <div class="form-row" style="grid-template-columns: 1.3fr 0.7fr;">
+                            <div class="form-group">
+                                <label for="biFontesDetectadas">Fontes de Dados Identificadas no Modelo</label>
+                                <input type="text" id="biFontesDetectadas" placeholder="Nenhuma conexão mapeada ainda..." readonly class="input-readonly">
+                            </div>
+                            <div class="form-group">
+                                <label for="biPrintTela">Print/Imagem da Capa (Opcional)</label>
+                                <input type="file" id="biPrintTela" accept="image/*" class="file-input-custom">
+                            </div>
+                        </div>
+
+                        <!-- SELEÇÃO DE VÍNCULO MULTIPLO DE INFRAESTRUTURA (Envolvido em contêiner de controle) -->
+                        <div class="form-row" id="containerSeletorWorkspaces">
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label>Alocar nos Workspaces / Ambientes (Seleção Múltipla)</label>
+                                <div class="workspace-checkbox-list" id="biWorkspaceVinculoContainer">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="justify-content: flex-end; margin-top: 12px;">
+                            <!-- Id adicionado ao botão para mudar o texto dinamicamente -->
+                            <button type="submit" id="btnSubmitCommit" class="btn-primary" style="width: auto; padding: 14px 40px;">Fazer Commit e Incrementar Versão</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+
+    
+    <!--------------- trecho de exclusao -------------------->   
+    <!-- MODAL CUSTOMIZADO DE EXCLUSÃO DE BINÁRIO (AUDITORIA) -->
+    <div class="custom-modal-overlay" id="deleteModal">
+        <div class="custom-modal-box">
+            <div class="modal-header-danger">
+                <h3>⚠️ Confirmar Descarte de Binário (.pbix)</h3>
+                <button class="btn-close-modal" id="btnCloseModalX">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 14px; margin-bottom: 16px; color: var(--text-main);">
+                    Esta ação irá remover permanentemente o arquivo físico do banco SQLite para liberar espaço. O histórico e os metadados continuarão guardados para conformidade da TI.
+                </p>
+                
+                <!-- Inputs Controlados de Justificativa -->
+                <div class="form-group">
+                    <label>Selecione a Justificativa Curta</label>
+                    <select id="modalMotivo">
+                        <option value="Obsoleto">Obsoleto</option>
+                        <option value="Desatualizado">Desatualizado</option>
+                        <option value="Liberação de espaço">Liberação de espaço</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Detalhamento Técnico / Observações</label>
+                    <textarea id="modalDetalhes" rows="3" placeholder="Insira informações adicionais sobre este descarte..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal-cancel" id="btnCancelModal">Cancelar</button>
+                <button class="btn-modal-confirm" id="btnConfirmModal">Confirmar Exclusão Física</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CUSTOMIZADO: DETALHES DA AUDITORIA DE EXCLUSÃO -->
+    <div class="custom-modal-overlay" id="detailsModal">
+        <div class="custom-modal-box">
+            <div class="modal-header-info">
+                <h3>📜 Relatório de Auditoria de Descarte</h3>
+                <button class="btn-close-modal" id="btnCloseDetailsX" style="color: var(--primary);">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="audit-log-card">
+                    <div class="audit-log-row">
+                        <span class="audit-log-label">Versão do Relatório:</span>
+                        <span class="audit-log-value font-mono" id="lblAuditVersao">v1.0</span>
+                    </div>
+                    <div class="audit-log-row">
+                        <span class="audit-log-label">Status Físico:</span>
+                        <span class="audit-log-value" style="color: #b91c1c; font-weight: 600;">Removido do Repositório (NULL BLOB)</span>
+                    </div>
+                    <div class="audit-log-row">
+                        <span class="audit-log-label">Responsável pela Ação:</span>
+                        <span class="audit-log-value" id="lblAuditUser">...</span>
+                    </div>
+                    <div class="audit-log-row">
+                        <span class="audit-log-label">Data/Hora da Operação:</span>
+                        <span class="audit-log-value" id="lblAuditData">...</span>
+                    </div>
+                    <div class="audit-log-row">
+                        <span class="audit-log-label">Justificativa Curta:</span>
+                        <span class="audit-log-value badge-reason" id="lblAuditMotivo">...</span>
+                    </div>
+                    <div class="audit-log-section">
+                        <span class="audit-log-label">Detalhamento Técnico / Observações:</span>
+                        <div class="audit-log-block" id="lblAuditDetalhes">...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal-cancel" id="btnCloseDetailsBtn">Fechar Relatório</button>
+            </div>
+        </div>
+    </div>
+
+    <!--------------- Fim trecho de exclusao ----------------->   
+
+    <script src="../static/js/dashboard.js"></script>
+</body>
+</html>
