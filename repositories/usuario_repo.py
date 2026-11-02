@@ -115,7 +115,7 @@ def autenticar_usuario(usuario, senha, tipo="admin"):
         else:
             conn.close()
             return None
-            
+    
     return None
 
 

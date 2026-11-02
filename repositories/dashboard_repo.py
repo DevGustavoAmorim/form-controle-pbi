@@ -148,14 +148,21 @@ def inserir_nova_versao_blob_com_dados(id_dashboard, numero_versao, bytes_pbix):
     conn.commit()
     conn.close()
 
-def vincular_dashboard_workspace(id_workspace, id_dashboard):
+def vincular_dashboard_workspace(id_workspace, id_dashboard, link_embed=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Garante que não duplique a restrição se for um commit de nova versão do mesmo relatório
-    cursor.execute("INSERT OR IGNORE INTO Workspace_Dashboard (id_workspace, id_dashboard) VALUES (?, ?)", 
-                   (id_workspace, id_dashboard))
-    conn.commit()
-    conn.close()
+    try:
+        # Insere o vínculo já com o link específico (pode ser None se não for enviado)
+        cursor.execute("""
+            INSERT OR REPLACE INTO Workspace_Dashboard (id_workspace, id_dashboard, link_embed) 
+            VALUES (?, ?, ?)
+        """, (id_workspace, id_dashboard, link_embed))
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao vincular dashboard {id_dashboard} ao workspace {id_workspace}: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 
 def atualizar_registro_principal(id_dashboard, nome, link, tabelas):
@@ -188,24 +195,32 @@ def atualizar_tabelas_do_modelo(id_dashboard, tabelas):
     conn.close()
     return True
 
-def reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids):
-    """Limpa as amarrações antigas do relatório e insere o novo lote selecionado nos checkboxes."""
+def reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids, links_workspaces=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
-    # Remove associações anteriores para evitar chaves duplicadas ou lixo lógico
-    cursor.execute("DELETE FROM Workspace_Dashboard WHERE id_dashboard = ?", (id_dashboard,))
-    
-    # Injeta a nova lista de ambientes selecionados na tela de edição
-    for ws_id in lista_workspaces_ids:
-        cursor.execute("""
-            INSERT INTO Workspace_Dashboard (id_workspace, id_dashboard) 
-            VALUES (?, ?)
-        """, (ws_id, id_dashboard))
+    try:
+        # 1. Limpa os vínculos antigos
+        cursor.execute("DELETE FROM Workspace_Dashboard WHERE id_dashboard = ?", (id_dashboard,))
         
-    conn.commit()
-    conn.close()
-    return True
+        # 2. Insere os novos
+        if links_workspaces is None:
+            links_workspaces = {}
+            
+        for ws_id in lista_workspaces_ids:
+            # Pega o link individual (se existir). Se não, fica None (NULL no banco).
+            link_individual = links_workspaces.get(str(ws_id))
+            
+            cursor.execute("""
+                INSERT INTO Workspace_Dashboard (id_workspace, id_dashboard, link_embed) 
+                VALUES (?, ?, ?)
+            """, (ws_id, id_dashboard, link_individual))
+            
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao salvar vínculos: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 def buscar_binario_por_id_versao(id_versao):
     """Busca o arquivo BLOB físico e o nome do painel para fins de download."""
@@ -221,3 +236,17 @@ def buscar_binario_por_id_versao(id_versao):
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
+def buscar_links_por_workspace(id_dashboard):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Busca o link exclusivo de cada workspace que este dashboard está vinculado
+    cursor.execute("""
+        SELECT id_workspace, link_embed 
+        FROM Workspace_Dashboard 
+        WHERE id_dashboard = ?
+    """, (id_dashboard,))
+    rows = cursor.fetchall()
+    conn.close()
+    # Retorna um dicionário: {"id_workspace": "link"}
+    return {str(row['id_workspace']): row['link_embed'] for row in rows}

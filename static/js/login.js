@@ -66,7 +66,11 @@ if (!loginForm) {
             const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: usuarioValue, password: senhaValue })
+                body: JSON.stringify({ 
+                    username: usuarioValue, 
+                    password: senhaValue, 
+                    tipo: tipoAcesso 
+                })
             });
 
             console.log("📥 Resposta recebida do servidor. Status:", response.status);

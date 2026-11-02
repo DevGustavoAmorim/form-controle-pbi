@@ -17,11 +17,38 @@ api_blueprint = Blueprint('api', __name__)
 
 @api_blueprint.route('/api/workspaces/<codigo_ldap>', methods=['GET'])
 def get_workspaces_por_usuario(codigo_ldap):
-    """Retorna o escopo de permissões iniciais da Home."""
-    dados, erro = workspace_service.obter_painel_workspaces(codigo_ldap)
-    if erro:
-        return jsonify({"error": erro}), 403
-    return jsonify(dados)
+    """Retorna o escopo de permissões iniciais da Home direto do banco."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # 1. Busca o usuário no banco pelo LDAP
+        cursor.execute("SELECT id_usuario, papel, nome FROM Usuarios WHERE codigo_ldap = ?", (codigo_ldap,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"error": "Usuário não encontrado."}), 403
+
+        # 2. Busca as workspaces desse usuário usando a função que já existe
+        workspaces = workspace_repo.listar_workspaces_por_usuario(user['id_usuario'])
+        
+        # 3. Para cada workspace, busca os dashboards e usuários
+        for ws in workspaces:
+            ws['dashs'] = workspace_repo.buscar_dashboards_por_workspace(ws['id_workspace'])
+            ws['users'] = workspace_repo.buscar_usuarios_por_workspace(ws['id_workspace'])
+
+        conn.close()
+        
+        # 4. Retorna no formato que o Frontend espera
+        return jsonify({
+            "papel": user['papel'],
+            "is_admin": user['papel'] == 127,
+            "nome": user['nome'],
+            "workspaces": workspaces
+        }), 200
+        
+    except Exception as e:
+        print(f"Erro na rota de usuário: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @api_blueprint.route('/api/workspaces', methods=['GET'])
 def listar_todas_workspaces():
@@ -131,13 +158,13 @@ import re
 
 @api_blueprint.route('/api/dashboards', methods=['GET'])
 def listar_dashboards():
-    """Retorna a lista de relatórios convertendo o JSON do banco no formato estrito do terminal."""
     try:
         dashboards = dashboard_repo.listar_todos_dashboards()
         
         for db in dashboards:
             db['commits'] = dashboard_repo.buscar_versoes_e_commits(db['id_dashboard'])
             db['fontes'] = "Oracle DB, Planilhas Corporativas"
+            db['links_workspaces'] = dashboard_repo.buscar_links_por_workspace(db['id_dashboard']) 
             
             tabelas_banco = db.get('tabelas_utilizadas')
             texto_formatado = []
@@ -165,12 +192,8 @@ def listar_dashboards():
             else:
                 db['tabelas_utilizadas_texto'] = "Nenhuma tabela indexada neste relatório."
                 
-            # Tratamento e normalização da URL do Iframe para não dar Not Found
             url_real_banco = str(db.get('link_embed', '')).strip()
-            if url_real_banco == "" or url_real_banco == "https://powerbi.com":
-                db['link_embed'] = "https://powerbi.com"
-            else:
-                db['link_embed'] = url_real_banco
+            db['link_embed'] = url_real_banco
                 
         return jsonify(dashboards), 200
     except Exception as e:
@@ -179,7 +202,6 @@ def listar_dashboards():
 
 @api_blueprint.route('/api/dashboards/editar', methods=['POST'])
 def editar_registro_principal_pbi():
-    """Salva a edição cadastral, atualiza tabelas e reconstrói os vínculos múltiplos de workspaces."""
     try:
         dados = request.get_json()
         id_dashboard = dados.get('id_dashboard')
@@ -187,15 +209,13 @@ def editar_registro_principal_pbi():
         link = str(dados.get('link', '')).strip()
         tabelas = dados.get('tabelas', '')
         lista_workspaces_ids = dados.get('id_workspaces', [])
+        links_workspaces = dados.get('links_workspaces', {}) # <--- Recebe os links
 
-        if not id_dashboard or not nome or not link:
-            return jsonify({"error": "ID, Nome e Link do Frame são campos obrigatórios."}), 400
+        if not id_dashboard or not nome:
+            return jsonify({"error": "ID e Nome são campos obrigatórios."}), 400
 
-        # 1. Executa o UPDATE das informações textuais macros e tabelas
         dashboard_repo.atualizar_registro_principal(id_dashboard, nome, link, tabelas)
-        
-        # 2. Executa a reestruturação física de vínculos relacionais N para N no SQLite
-        dashboard_repo.reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids)
+        dashboard_repo.reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids, links_workspaces)
         
         return jsonify({"success": True, "message": "Registro e workspaces sincronizados."}), 200
     except Exception as e:

@@ -11,19 +11,21 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-        # 1. Tabela de Usuários
+    # 1. Tabela de Usuários (RESTAURADA)
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS Workspace (
-            id_workspace INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id_pbi TEXT UNIQUE NOT NULL,
-            nome_comercial TEXT NOT NULL,
-            descricao TEXT,
-            icone TEXT,
+        CREATE TABLE IF NOT EXISTS Usuarios (
+            id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo_ldap TEXT UNIQUE NOT NULL,
+            nome TEXT NOT NULL,
+            email TEXT,
+            senha TEXT,
+            papel INTEGER NOT NULL,
             data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
     try:
-        cursor.execute("ALTER TABLE Workspace ADD COLUMN icone TEXT;")
+        cursor.execute("ALTER TABLE Usuarios ADD COLUMN senha TEXT;")
     except sqlite3.OperationalError:
         pass
 
@@ -43,11 +45,11 @@ def init_db():
             workspace_id_pbi TEXT UNIQUE NOT NULL,
             nome_comercial TEXT NOT NULL,
             descricao TEXT,
-            icone TEXT, -- NOVA COLUNA
+            icone TEXT,
             data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    # Tenta adicionar a coluna caso o banco já exista
+    
     try:
         cursor.execute("ALTER TABLE Workspace ADD COLUMN icone TEXT;")
     except sqlite3.OperationalError:
@@ -88,15 +90,20 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Workspace_Dashboard (
             id_workspace INTEGER,
             id_dashboard INTEGER,
-            link_embed TEXT, -- NOVA COLUNA: Guarda o link exclusivo desse workspace
+            link_embed TEXT,
             PRIMARY KEY (id_workspace, id_dashboard),
             FOREIGN KEY (id_workspace) REFERENCES Workspace(id_workspace),
             FOREIGN KEY (id_dashboard) REFERENCES Dashboard(id_dashboard)
         )
     ''')
-    
 
-    # 6. Versionamento dos Dashboards (Garante as colunas de Soft-Delete de auditoria)
+    try:
+        cursor.execute("ALTER TABLE Workspace_Dashboard ADD COLUMN link_embed TEXT;")
+        print("[Migração] Coluna link_embed injetada na Workspace_Dashboard.")
+    except sqlite3.OperationalError:
+        pass
+
+    # 6. Versionamento dos Dashboards
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Dashboards_versao (
             id_versao INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -69,6 +69,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
     }
     const usuarioLogado = JSON.parse(userStorage);
+    aplicarPermissoes(usuarioLogado); 
 
     // 2. Sidebar
     const btnCloseSidebar = document.getElementById("btnCloseSidebar");
@@ -114,6 +115,13 @@ document.addEventListener("DOMContentLoaded", function () {
             if (item.botao.id === "menuWorkspace") renderizarTabelaWorkspaces();
             if (item.botao.id === "menuPowerBI") renderizarTabelaDashboards();
             if (item.botao.id === "menuUsuario") renderizarTabelaUsuarios();
+            if (item.botao.id === "menuHome") {
+                const userStorage = localStorage.getItem("usuarioLogado");
+                if (userStorage) {
+                    const user = JSON.parse(userStorage);
+                    carregarDadosPainel(user.codigo_ldap);
+                }
+            }
         });
     });
 
@@ -290,12 +298,21 @@ function configurarFormularios() {
                     body: JSON.stringify(payload)
                 });
 
-                if (response.ok) {
+                                if (response.ok) {
                     exibirNotificacaoSucesso("Workspace cadastrada com sucesso!");
                     formWS.reset();
                     iconeBase64Carregado = null;
                     const txtPreview = document.getElementById("wsIconePreviewText");
                     if (txtPreview) txtPreview.style.display = "none";
+                    
+                    // --- ATUALIZA A HOME AUTOMATICAMENTE ---
+                    const userStorage = localStorage.getItem("usuarioLogado");
+                    if (userStorage) {
+                        const user = JSON.parse(userStorage);
+                        carregarDadosPainel(user.codigo_ldap); 
+                    }
+                    // ----------------------------------------
+
                     document.getElementById("subTabListarWS")?.click();
                 } else {
                     const err = await response.json();
@@ -574,6 +591,7 @@ async function carregarDadosPainel(codigoLdap) {
             workspacesParaMostrar = data.workspaces || [];
         }
 
+        // Atualiza os dados do usuário na barra lateral
         const userName = document.getElementById("userName");
         const userCode = document.getElementById("userCode");
         const badge = document.getElementById("userBadge");
@@ -582,6 +600,7 @@ async function carregarDadosPainel(codigoLdap) {
         if (userCode && usuarioLogado) userCode.textContent = `LDAP: ${usuarioLogado.codigo_ldap}`;
         if (badge && usuarioLogado) badge.textContent = isAdmin ? "Papel: Administrador" : "Papel: Visualizador";
 
+        // Desenha os cards
         const grid = document.getElementById("workspacesGrid");
         if (!grid) return;
         grid.innerHTML = "";
@@ -595,11 +614,18 @@ async function carregarDadosPainel(codigoLdap) {
             const card = document.createElement("div");
             card.className = "workspace-card-home";
 
-            // NÍVEL 1: Clicar no card abre a pasta do Workspace (Nível 2)
+            // NÍVEL 1: Clicar no card abre a pasta do Workspace
             card.onclick = () => abrirWorkspaceHome(ws);
 
             const icone = ws.icone || "📁"; 
-            const qtdDashs = ws.qtd_dashboards !== undefined ? ws.qtd_dashboards : 0;
+            
+            // --- AQUI ESTÁ A CORREÇÃO DA CONTAGEM ---
+            let qtdDashs = 0;
+            if (Array.isArray(ws.dashs)) {
+                qtdDashs = ws.dashs.length;
+            } else if (ws.qtd_dashboards !== undefined) {
+                qtdDashs = ws.qtd_dashboards;
+            }
 
             let iconeHTML = "";
             if (icone.startsWith("data:image")) {
@@ -621,126 +647,300 @@ async function carregarDadosPainel(codigoLdap) {
 
     } catch (error) {
         console.error("Erro interno detectado:", error);
+        const grid = document.getElementById("workspacesGrid");
+        if (grid) {
+            grid.innerHTML = `<p style="color:#b91c1c; font-size:14px;">
+                Falha crítica ao conectar com a camada de dados.</p>`;
+        }
     }
 }
 
 // NÍVEL 2: Abrir a "Pasta" do Workspace
+
 async function abrirWorkspaceHome(ws) {
-    document.getElementById("homeTitulo").textContent = ws.nome_comercial || ws.nome;
-    document.getElementById("homeSubtitulo").textContent = ws.descricao || "Selecione um painel para visualizar.";
-    document.getElementById("btnVoltarHome").style.display = "flex";
+    document.getElementById("homeTitulo").textContent =
+        ws.nome_comercial || ws.nome;
+
+    document.getElementById("homeSubtitulo").textContent =
+        ws.descricao || "Selecione um painel para visualizar.";
+
     document.getElementById("workspacesGrid").style.display = "none";
-    
+
+    // Cria o botão de voltar
+    const header = document.querySelector("#tabHome .content-header");
+
+    const btnAntigo = document.getElementById("btnVoltarDinamico");
+    if (btnAntigo) btnAntigo.remove();
+
+    const btnVoltar = document.createElement("button");
+    btnVoltar.id = "btnVoltarDinamico";
+    btnVoltar.textContent = "← Voltar para Workspaces";
+
+    btnVoltar.style.cssText = `
+        background: var(--primary-light);
+        color: var(--primary);
+        border: 1px solid #bae6fd;
+        padding: 8px 16px;
+        border-radius: var(--radius-md);
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    `;
+
+    btnVoltar.onclick = voltarParaRaizHome;
+
+    if (header) {
+        header.insertBefore(btnVoltar, header.firstChild);
+    }
+
+    // Atualiza o breadcrumb
     document.getElementById("homeBreadcrumb").innerHTML = `
-        <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
+        <span
+            style="cursor:pointer; color:var(--primary); font-weight:600;"
+            onclick="voltarParaRaizHome()"
+        >🏠 Meus Workspaces</span>
         <span> / </span>
-        <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(ws.nome_comercial || ws.nome)}</span>
+        <span style="font-weight:600; color:var(--text-main);">
+            ${escapeHtml(ws.nome_comercial || ws.nome)}
+        </span>
     `;
 
     const containerDashs = document.getElementById("homeDashboardView");
-    containerDashs.style.display = "none"; 
+    containerDashs.style.display = "none";
 
+    // Cria ou reutiliza o grid de dashboards
     let gridDashs = document.getElementById("homeDashboardsGrid");
+
     if (!gridDashs) {
         gridDashs = document.createElement("div");
         gridDashs.id = "homeDashboardsGrid";
         gridDashs.className = "dashboards-grid";
-        containerDashs.parentNode.insertBefore(gridDashs, containerDashs);
+
+        containerDashs.parentNode.insertBefore(
+            gridDashs,
+            containerDashs
+        );
     }
+
     gridDashs.style.display = "grid";
-    gridDashs.innerHTML = "<p class='text-muted'>Carregando painéis...</p>";
+    gridDashs.innerHTML =
+        "<p class='text-muted'>Carregando painéis...</p>";
+
+    // Valida os dashboards vinculados à workspace
+    if (!Array.isArray(ws.dashs) || ws.dashs.length === 0) {
+        gridDashs.innerHTML = `
+            <p class="text-muted" style="grid-column:1/-1;">
+                Nenhum dashboard alocado nesta workspace.
+            </p>
+        `;
+        return;
+    }
 
     try {
-        // Busca todos os dashboards e filtra localmente pelo nome do Workspace
-        const resDash = await fetch('/api/dashboards');
-        const todosDashboards = await resDash.json();
+        // Busca todos os dashboards cadastrados
+        const resDash = await fetch("/api/dashboards");
 
-        gridDashs.innerHTML = "";
-        
-        // Filtra os dashboards daquele workspace
-        const dashboardsDoWs = todosDashboards.filter(d => 
-            d.nome_workspace && d.nome_workspace.includes(ws.nome_comercial)
-        );
-
-        if (dashboardsDoWs.length === 0) {
-            gridDashs.innerHTML = "<p class='text-muted' style='grid-column: 1/-1;'>Nenhum dashboard alocado nesta workspace.</p>";
-            return;
+        if (!resDash.ok) {
+            throw new Error(
+                `Erro HTTP ${resDash.status} ao buscar dashboards.`
+            );
         }
 
-        dashboardsDoWs.forEach(db => {
+        const resposta = await resDash.json();
+
+        // Aceita uma lista direta ou uma lista dentro de uma propriedade
+        const todosDashboards = Array.isArray(resposta)
+            ? resposta
+            : resposta.dashboards;
+
+        if (!Array.isArray(todosDashboards)) {
+            throw new Error(
+                "A API não retornou uma lista válida de dashboards."
+            );
+        }
+
+        gridDashs.innerHTML = "";
+
+        // Normaliza os nomes para evitar diferenças de espaços e parênteses
+        const normalizarNome = (nome) =>
+            String(nome || "")
+                .replace(/\s*\([^)]*\)/g, "")
+                .trim()
+                .toLowerCase();
+
+        let encontrados = 0;
+
+        ws.dashs.forEach((item) => {
+            // Aceita tanto nomes em texto quanto objetos com nome_dashboard
+            const nomeOriginal =
+                typeof item === "string"
+                    ? item
+                    : item?.nome_dashboard || item?.nome;
+
+            const nomeLimpo = normalizarNome(nomeOriginal);
+
+            if (!nomeLimpo) return;
+
+            const db = todosDashboards.find(
+                (dashboard) =>
+                    normalizarNome(dashboard.nome_dashboard) === nomeLimpo
+            );
+
+            if (!db) {
+                console.warn(
+                    "Dashboard vinculado não encontrado:",
+                    nomeOriginal
+                );
+                return;
+            }
+
+            // Cria o card do dashboard
             const miniCard = document.createElement("div");
             miniCard.className = "dashboard-card-mini";
-            const linkLimpo = extrairLinkPuro(db.link_embed);
+
+            // Prioriza o link específico desta workspace
+            let linkParaEsteWs = db.link_embed;
+
+            if (
+                db.links_workspaces &&
+                db.links_workspaces[String(ws.id_workspace)]
+            ) {
+                linkParaEsteWs =
+                    db.links_workspaces[String(ws.id_workspace)];
+            }
+
+            const linkLimpo = extrairLinkPuro(linkParaEsteWs);
 
             miniCard.innerHTML = `
-                <div class="mini-iframe-preview">
-                    <iframe src="${linkLimpo}" scrolling="no"></iframe>
+                <div class="mini-iframe-preview"></div>
+                <div class="dashboard-mini-title">
+                    ${escapeHtml(db.nome_dashboard)}
                 </div>
-                <div class="dashboard-mini-title">${escapeHtml(db.nome_dashboard)}</div>
             `;
 
-            miniCard.onclick = () => abrirDashboardHome(db, ws);
+            // Evita criar um iframe com link vazio
+            const preview = miniCard.querySelector(".mini-iframe-preview");
+
+            if (linkLimpo) {
+                const iframe = document.createElement("iframe");
+                iframe.src = linkLimpo;
+                iframe.scrolling = "no";
+                iframe.loading = "lazy";
+                iframe.title = db.nome_dashboard || "Preview do dashboard";
+
+                preview.appendChild(iframe);
+            } else {
+                preview.textContent = "Pré-visualização indisponível";
+            }
+
+            miniCard.onclick = () =>
+                abrirDashboardHome(db, ws, linkLimpo);
+
             gridDashs.appendChild(miniCard);
+            encontrados++;
         });
+
+        // Nenhum dashboard correspondeu aos vínculos
+        if (encontrados === 0) {
+            gridDashs.innerHTML = `
+                <p class="text-muted" style="grid-column:1/-1;">
+                    Os painéis vinculados não foram encontrados.
+                    Verifique os nomes cadastrados e os vínculos da workspace.
+                </p>
+            `;
+        }
 
     } catch (error) {
         console.error("Erro ao buscar dashboards:", error);
-        gridDashs.innerHTML = "<p style='color:red;'>Erro ao carregar os dashboards.</p>";
+
+        gridDashs.innerHTML = `
+            <p style="color:red; grid-column:1/-1;">
+                Falha ao carregar os painéis.
+                Verifique a comunicação com o servidor.
+            </p>
+        `;
     }
 }
 
+
 // NÍVEL 3: Expandir o Dashboard
-function abrirDashboardHome(db, ws) {
-    document.getElementById("homeDashboardsGrid").style.display = "none";
+function abrirDashboardHome(db, ws, linkEspecifico) {
+    // Esconde a grade de miniaturas
+    const gridDashs = document.getElementById("homeDashboardsGrid");
+    if (gridDashs) gridDashs.style.display = "none";
     
     // Atualiza o Breadcrumb
     const breadcrumb = document.getElementById("homeBreadcrumb");
-    breadcrumb.innerHTML = `
-        <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
-        <span> / </span>
-        <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="abrirWorkspaceHome(${JSON.stringify(ws).replace(/"/g, '&quot;')})">${escapeHtml(ws.nome_comercial || ws.nome)}</span>
-        <span> / </span>
-        <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(db.nome_dashboard)}</span>
-    `;
+    if (breadcrumb) {
+        breadcrumb.innerHTML = `
+            <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
+            <span> / </span>
+            <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="abrirWorkspaceHome(${JSON.stringify(ws).replace(/"/g, '&quot;')})">${escapeHtml(ws.nome_comercial || ws.nome)}</span>
+            <span> / </span>
+            <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(db.nome_dashboard)}</span>
+        `;
+    }
 
+    // Atualiza os títulos
     document.getElementById("homeTitulo").textContent = db.nome_dashboard;
     document.getElementById("homeSubtitulo").textContent = "Visualização do relatório em tela cheia.";
 
-    // Exibe o iframe grande
+    // Exibe o container do frame grande
     const containerDashs = document.getElementById("homeDashboardView");
-    containerDashs.style.display = "block";
+    if (containerDashs) {
+        containerDashs.style.display = "block";
+    }
     
-    // Limpa o link e joga no iframe
-    document.getElementById("homeIframe").src = extrairLinkPuro(db.link_embed);
+    // Pega o iframe e coloca o link
+    const iframe = document.getElementById("homeIframe");
+    if (iframe) {
+        iframe.src = linkEspecifico;
+    } else {
+        console.error("❌ ERRO: O elemento 'homeIframe' não foi encontrado no HTML.");
+    }
 }
 
 // Função para voltar tudo para a raiz (botão de voltar)
 function voltarParaRaizHome() {
     // Limpa iframe
-    document.getElementById("homeIframe").src = "";
+    const iframe = document.getElementById("homeIframe");
+    if (iframe) iframe.src = "";
     
     // Esconde as visualizações
-    document.getElementById("homeDashboardView").style.display = "none";
+    const viewDash = document.getElementById("homeDashboardView");
+    if (viewDash) viewDash.style.display = "none";
+    
     const gridDashs = document.getElementById("homeDashboardsGrid");
     if (gridDashs) gridDashs.style.display = "none";
     
     // Mostra a grade de Workspaces
-    document.getElementById("workspacesGrid").style.display = "grid";
+    const gridWs = document.getElementById("workspacesGrid");
+    if (gridWs) gridWs.style.display = "grid";
     
+    // Remove o botão dinâmico de voltar se existir
+    const btnDinamico = document.getElementById("btnVoltarDinamico");
+    if (btnDinamico) btnDinamico.remove();
+
     // Reseta os títulos
     document.getElementById("homeTitulo").textContent = "Meus Workspaces Autorizados";
     document.getElementById("homeSubtitulo").textContent = "Selecione o ambiente para visualizar os painéis alocados.";
-    document.getElementById("btnVoltarHome").style.display = "none";
     
     // Reseta o Breadcrumb
     document.getElementById("homeBreadcrumb").innerHTML = `
         <span style="cursor: pointer; color: var(--primary); font-weight: 600;">🏠 Meus Workspaces</span>
     `;
 
-    // Recarrega os cards iniciais (caso tenha mudado algo)
-    const codigoLdap = JSON.parse(localStorage.getItem("usuarioLogado")).codigo_ldap;
-    carregarDadosPainel(codigoLdap);
+    // Recarrega os cards iniciais
+    const userStorage = localStorage.getItem("usuarioLogado");
+    if (userStorage) {
+        const user = JSON.parse(userStorage);
+        carregarDadosPainel(user.codigo_ldap);
+    }
 }
+
 // ------------------------------------------------------------
 // Workspaces — listagem + auditoria inline
 // ------------------------------------------------------------
@@ -807,23 +1007,40 @@ function toggleAuditoriaInline(ws, trWS, tbody) {
     const dashs = Array.isArray(ws.dashs) ? ws.dashs : [];
     const users = Array.isArray(ws.users) ? ws.users : [];
 
+    // AQUI: Mapeia os dashboards para buscar o link exclusivo de cada um
     const liDashboards = dashs.length > 0
-        ? dashs.map(d => `
+        ? dashs.map(d => {
+            // Tenta achar o dashboard na memória global para pegar os links
+            const dbEncontrado = listaDashboardsCarregados.find(item => d.includes(item.nome_dashboard));
+            
+            // Se achou, verifica se tem link exclusivo para este workspace
+            let linkExclusivo = "";
+            if (dbEncontrado) {
+                if (dbEncontrado.links_workspaces && dbEncontrado.links_workspaces[String(ws.id_workspace)]) {
+                    linkExclusivo = dbEncontrado.links_workspaces[String(ws.id_workspace)];
+                } else {
+                    linkExclusivo = dbEncontrado.link_embed || "";
+                }
+            }
+
+            // Passa o linkExclusivo como 3º parâmetro no redirecionarParaItem
+            return `
             <li>
                 <span style="font-weight: 500;">${escapeHtml(d)}</span>
-                <button onclick="event.stopPropagation(); redirecionarParaItem('pbi', '${escapeHtml(d).replace(/'/g, "\\'")}', event)" 
+                <button onclick="event.stopPropagation(); redirecionarParaItem('pbi', '${escapeHtml(d).replace(/'/g, "\\'")}', '${escapeHtml(linkExclusivo).replace(/'/g, "\\'")}', event)" 
                         title="Ir direto para este Dashboard" 
                         style="background: #e0f2fe; border: 1px solid #bae6fd; color: #0284c7; cursor:pointer; font-size: 14px; padding: 2px 10px; border-radius: 4px; font-weight: bold; flex-shrink: 0;">
                     ➔
                 </button>
-            </li>`).join("")
+            </li>`;
+        }).join("")
         : "<li style='font-size: 13px; color: var(--text-muted); background: transparent; border: none;'>Nenhum relatório alocado neste ambiente</li>";
 
     const liUsuarios = users.length > 0
         ? users.map(u => `
             <li>
                 <span style="font-weight: 500;">${escapeHtml(u)}</span>
-                <button onclick="event.stopPropagation(); redirecionarParaItem('user', '${escapeHtml(u).replace(/'/g, "\\'")}', event)" 
+                <button onclick="event.stopPropagation(); redirecionarParaItem('user', '${escapeHtml(u).replace(/'/g, "\\'")}', '', event)" 
                         title="Ir direto para este Usuário" 
                         style="background: #e0f2fe; border: 1px solid #bae6fd; color: #0284c7; cursor:pointer; font-size: 14px; padding: 2px 10px; border-radius: 4px; font-weight: bold; flex-shrink: 0;">
                     ➔
@@ -1010,7 +1227,7 @@ function toggleAuditoriaBIInline(db, trDB, tbody) {
     trAudit.id = idLinhaAuditoria;
     trAudit.style.backgroundColor = "#f8fafc";
 
-    // ----- Histórico de commits -----
+    // ----- Histórico de commits (igual ao seu) -----
     let linhasCommits = "";
     const commits = Array.isArray(db.commits) ? db.commits : [];
     const nomePainel = db.nome_dashboard || "Relatorio";
@@ -1027,38 +1244,24 @@ function toggleAuditoriaBIInline(db, trDB, tbody) {
             let btnAcao;
             if (deletado) {
                 const payloadEncoded = encodeURIComponent(JSON.stringify(c));
-                btnAcao = `<a href="javascript:void(0);"
-                    onclick="exibirDetalhesDelecao('${payloadEncoded}', event)"
-                    style="color:#b91c1c; font-size:12px; font-weight:600; text-decoration:underline; cursor:pointer; display: inline-block; padding: 4px;">
-                    Ver Detalhes do Descarte</a>`;
+                btnAcao = `<a href="javascript:void(0);" onclick="exibirDetalhesDelecao('${payloadEncoded}', event)" style="color:#b91c1c; font-size:11px; font-weight:600; text-decoration:underline; cursor:pointer;">Ver Detalhes do Descarte</a>`;
             } else {
                 btnAcao = `<div style="display:flex; gap:8px; align-items:center; justify-content: center;">
-                    <button onclick="event.stopPropagation(); window.location.href='/api/dashboards/versao/download/${c.id_versao}';"
-                        style="background-color:#0284c7; color:#fff; border:none; padding:6px 12px; border-radius:4px;
-                        cursor:pointer; font-weight:600; font-size:12px; white-space: nowrap;">
-                        📥 Baixar</button>
-                    <button onclick="executarDescarteBinario(${c.id_versao}, event)"
-                        style="background-color:#fee2e2; color:#991b1b; border:none; padding:6px 12px; border-radius:4px;
-                        cursor:pointer; font-weight:500; font-size:12px; white-space: nowrap;">
-                        Excluir Binário</button>
+                    <button onclick="event.stopPropagation(); window.location.href='/api/dashboards/versao/download/${c.id_versao}';" style="background-color:#0284c7; color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:600; font-size:12px; white-space: nowrap;">📥 Baixar</button>
+                    <button onclick="executarDescarteBinario(${c.id_versao}, event)" style="background-color:#fee2e2; color:#991b1b; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:500; font-size:12px; white-space: nowrap;">Excluir Binário</button>
                 </div>`;
             }
 
-            // Montagem da linha com os textos solicitados
             linhasCommits += `
                 <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:16px 12px; vertical-align:middle; text-align:left;">
                         <span style="font-size:13px; font-weight:600; color:var(--text-main);">${escapeHtml(nomePainel)}.pbix</span>
-                        <span style="display:inline-block; margin-left:8px; background:var(--primary-light); color:var(--primary); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">
-                            ${escapeHtml(c.numero_versao || "")}
-                        </span>
+                        <span style="display:inline-block; margin-left:8px; background:var(--primary-light); color:var(--primary); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">${escapeHtml(c.numero_versao || "")}</span>
                     </td>
                     <td style="padding:16px 12px; vertical-align:middle; color:var(--text-muted); text-align:center;">${data}</td>
                     <td style="padding:16px 12px; vertical-align:middle; font-size:12px; text-align:left;">
                         <div style="margin-bottom:4px;">${statusBlob}</div>
-                        <small style="color:#475569; font-style:italic; font-weight:500;">
-                            📝 Resumo: ${resumo}
-                        </small>
+                        <small style="color:#475569; font-style:italic; font-weight:500;">📝 Resumo: ${resumo}</small>
                     </td>
                     <td style="padding:16px 12px; vertical-align:middle; text-align:center;">${btnAcao}</td>
                 </tr>`;
@@ -1067,102 +1270,86 @@ function toggleAuditoriaBIInline(db, trDB, tbody) {
         linhasCommits = "<tr><td colspan='4' style='padding:16px; text-align:center;'>Nenhum histórico registrado.</td></tr>";
     }
 
-    // ----- Bloco de tabelas -----
     const textoBruto = db.tabelas_utilizadas_texto || db.tabelas_utilizadas || "Nenhuma tabela indexada.";
     const textoFormatado = formatarDicionarioDados(textoBruto);
 
     const listaTabelasHTML = `
-        <div style="font-family:'Fira Code','Courier New',monospace; font-size:13px; color:#0f172a;
-            background-color:#f8fafc; padding:18px; border-radius:8px; border:1px solid #cbd5e1;
-            line-height:1.6; max-height:280px; overflow-y:auto; white-space:pre-wrap; margin:0;
-            box-shadow:inset 0 2px 4px rgba(0,0,0,0.02);">
-${escapeHtml(textoFormatado)}</div>`;
+        <div style="font-family:'Fira Code','Courier New',monospace; font-size:13px; color:#0f172a; background-color:#f8fafc; padding:18px; border-radius:8px; border:1px solid #cbd5e1; line-height:1.6; max-height:280px; overflow-y:auto; white-space:pre-wrap; margin:0; box-shadow:inset 0 2px 4px rgba(0,0,0,0.02);">
+        ${escapeHtml(textoFormatado)}</div>`;
 
-        trAudit.innerHTML = `
+    // AQUI: Prepara as opções do select (Global + Links Específicos)
+    let opcoesFrame = `<option value="${extrairLinkPuro(db.link_embed)}">Link Padrão (Global)</option>`;
+    
+    if (db.links_workspaces) {
+        for (const [idWs, link] of Object.entries(db.links_workspaces)) {
+            if (link) {
+                opcoesFrame += `<option value="${extrairLinkPuro(link)}">Frame do Workspace ID: ${idWs}</option>`;
+            }
+        }
+    }
+
+    trAudit.innerHTML = `
         <td colspan="4">
-            <div id="edit-block-db-${db.id_dashboard}" class="bi-audit-container"
-                 style="padding:24px 32px; display:flex; flex-direction:column; gap:24px;
-                        width:100%; box-sizing:border-box; border-bottom:2px solid var(--primary-light);">
+            <div id="edit-block-db-${db.id_dashboard}" class="bi-audit-container" style="padding:24px 32px; display:flex; flex-direction:column; gap:24px; width:100%; box-sizing:border-box; border-bottom:2px solid var(--primary-light);">
 
                 <!-- 1. INFORMAÇÕES DE GOVERNANÇA E TABELAS -->
                 <div>
-                    <!-- Cabeçalho com botões, usando flex-wrap para não estourar a tela -->
                     <div style="display:flex; flex-wrap: wrap; justify-content:space-between; align-items:center; gap: 12px; margin-bottom:16px; width: 100%;">
-                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.5px; font-weight:700; margin: 0;">
-                            📋 Informações de Governança</h4>
-                        
-                        <!-- Botões com flex-shrink: 0 para não sumirem -->
+                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.5px; font-weight:700; margin: 0;">📋 Informações de Governança</h4>
                         <div style="display:flex; gap:10px; flex-shrink: 0;">
-                            <button onclick="event.stopPropagation(); atalhoCommitNovaVersao(${db.id_dashboard}, event)"
-                                style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0;
-                                padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">
-                                🚀 Commit de Nova Versão</button>
-                            <button onclick="event.stopPropagation(); ativarModoEdicaoDB(${db.id_dashboard}, event)"
-                                style="background:var(--primary-light); color:var(--primary); border:none;
-                                padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">
-                                ✏️ Editar Cadastro</button>
+                            <button onclick="event.stopPropagation(); atalhoCommitNovaVersao(${db.id_dashboard}, event)" style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">🚀 Commit de Nova Versão</button>
+                            <button onclick="event.stopPropagation(); ativarModoEdicaoDB(${db.id_dashboard}, event)" style="background:var(--primary-light); color:var(--primary); border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">✏️ Editar Cadastro</button>
                         </div>
                     </div>
 
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
                         <div>
-                            <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">
-                                📍 Localização no Ambiente</h4>
-                            <p style="font-size:13px; font-weight:600; color:var(--primary);">
-                                ${escapeHtml(db.nome_workspace || "Ambiente Central Compartilhado")}</p>
+                            <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">📍 Localização no Ambiente</h4>
+                            <p style="font-size:13px; font-weight:600; color:var(--primary);">${escapeHtml(db.nome_workspace || "Ambiente Central Compartilhado")}</p>
                         </div>
                         <div>
-                            <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">
-                                🔌 Conexões de Dados Mapeadas</h4>
-                            <p style="font-size:13px; font-weight:500; color:var(--text-main);">
-                                ${escapeHtml(db.fontes || "Oracle DB, Excel")}</p>
+                            <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">🔌 Conexões de Dados Mapeadas</h4>
+                            <p style="font-size:13px; font-weight:500; color:var(--text-main);">${escapeHtml(db.fontes || "Oracle DB, Excel")}</p>
                         </div>
                     </div>
 
                     <div style="margin-bottom:16px;">
-                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">
-                            🔗 Link do Iframe (Embed)</h4>
-                        <p style="font-size:12px; font-family:monospace; color:var(--text-muted);
-                            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:#fff;
-                            padding:6px; border-radius:4px; border:1px solid var(--border-color);">
-                            ${escapeHtml(extrairLinkPuro(db.link_embed))}</p>
+                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">🔗 Link do Iframe (Embed)</h4>
+                        <p style="font-size:12px; font-family:monospace; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:#fff; padding:6px; border-radius:4px; border:1px solid var(--border-color);">${escapeHtml(extrairLinkPuro(db.link_embed))}</p>
                     </div>
 
                     <div style="background:#fff; border:1px solid var(--border-color); padding:16px; border-radius:8px;">
-                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
-                            🗂️ Tabelas / Visões Consultadas no Banco (Oracle)</h4>
-                        <div style="font-family:monospace; font-size:12px; line-height:1.5;">
-                            ${listaTabelasHTML}
-                        </div>
+                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">🗂️ Tabelas / Visões Consultadas no Banco (Oracle)</h4>
+                        <div style="font-family:monospace; font-size:12px; line-height:1.5;">${listaTabelasHTML}</div>
                     </div>
                 </div>
 
-                <!-- 2. VISUALIZAÇÃO DO RELATÓRIO (IFRAME) -->
+                <!-- 2. VISUALIZAÇÃO DO RELATÓRIO (IFRAME COM SELETOR) -->
                 <div>
-                    <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
-                        🖼️ Visualização do Relatório (Homologação / Iframe Ativo)</h4>
-                    <div class="pbi-frame-wrapper"
-                         style="width:100%; height:600px; background:#e2e8f0; border-radius:8px;
-                                overflow:hidden; border:1px solid var(--border-color); position: relative; z-index: 1;">
-                        <iframe src="${extrairLinkPuro(db.link_embed)}" 
-                                title="Relatório Power BI"
-                                style="width:100%; height:100%; border:none; display: block;" 
-                                allowfullscreen 
-                                webkitallowfullscreen 
-                                mozallowfullscreen>
-                        </iframe>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom:8px;">
+                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin: 0;">🖼️ Visualização do Relatório</h4>
+                        
+                        <!-- O SELETOR DE FRAME ENTRA AQUI -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 12px; font-weight: 600; color: var(--primary);">Escolher Frame:</label>
+                            <select onchange="document.getElementById('iframe-db-${db.id_dashboard}').src = this.value;" style="padding: 6px 12px; border: 1px solid var(--primary); border-radius: 6px; font-size: 12px; color: var(--text-main); background: #fff; outline: none;">
+                                ${opcoesFrame}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="pbi-frame-wrapper" style="width:100%; height:600px; background:#e2e8f0; border-radius:8px; overflow:hidden; border:1px solid var(--border-color); position: relative; z-index: 1;">
+                        <iframe id="iframe-db-${db.id_dashboard}" src="${extrairLinkPuro(db.link_embed)}" title="Relatório Power BI" style="width:100%; height:100%; border:none; display: block;" allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
                     </div>
                 </div>
 
                 <!-- 3. HISTÓRICO DE COMMITS -->
                 <div>
-                    <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
-                        📜 Histórico de Commits e Controle de Versão</h4>
+                    <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">📜 Histórico de Commits e Controle de Versão</h4>
                     <div style="border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;">
                         <table class="version-control-table" style="width:100%; border-collapse:collapse; table-layout: fixed;">
                             <thead style="background-color:#f1f5f9; color:var(--text-muted); border-bottom: 1px solid var(--border-color);">
                                 <tr>
-                                    <!-- Aumentei a largura desta coluna para caber o nome + a versão na mesma linha -->
                                     <th style="padding:14px 12px; width: 35%; text-align: left; font-weight: 600;">Arquivo / Versão</th>
                                     <th style="padding:14px 12px; width: 15%; text-align: center; font-weight: 600;">Data Commit</th>
                                     <th style="padding:14px 12px; width: 30%; text-align: left; font-weight: 600;">Status / Detalhes</th>
@@ -1292,19 +1479,25 @@ async function ativarModoEdicaoDB(idDashboard, event) {
         const todasWorkspaces = await resWS.json();
         const ambientesAtuais = db.nome_workspace ? db.nome_workspace.split(", ") : [];
 
-        (todasWorkspaces || []).forEach(ws => {
+                (todasWorkspaces || []).forEach(ws => {
             const estaVinculado = ambientesAtuais.includes(ws.nome_comercial) ? "checked" : "";
             
-            // NOVO: Campo para colar o link específico de cada workspace
+            // AQUI: Pega o link salvo na memória do banco
+            let linkSalvo = "";
+            if (db.links_workspaces && db.links_workspaces[String(ws.id_workspace)]) {
+                linkSalvo = db.links_workspaces[String(ws.id_workspace)];
+            }
+            
             opcoesWorkspacesHTML += `
                 <div style="display: flex; flex-direction: column; gap: 4px; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
                     <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer; font-weight: 600;">
                         <input type="checkbox" name="edit_workspaces_${db.id_dashboard}" value="${escapeHtml(ws.id_workspace)}" ${estaVinculado} style="width:16px; height:16px; accent-color:var(--primary);">
                         <span>${escapeHtml(ws.nome_comercial || "")}</span>
                     </label>
+                    <!-- O INPUT AGORA TEM O VALUE PREENCHIDO -->
                     <input type="url" name="edit_link_ws_${ws.id_workspace}" 
-                           placeholder="Link do Iframe específico para esta Workspace (Opcional)" 
-                           value="" 
+                           placeholder="Link específico (Se vazio, usará o Padrão)" 
+                           value="${escapeHtml(linkSalvo)}" 
                            style="width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; margin-top: 4px;">
                 </div>`;
         });
@@ -1382,8 +1575,8 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
         }
     });
 
-    if (!novoNome || !novoLink) {
-        exibirNotificacaoErro("Nome e Link Padrão são obrigatórios.");
+    if (!novoNome) {
+        exibirNotificacaoErro("O nome do relatório é obrigatório.");
         return;
     }
 
@@ -1397,7 +1590,7 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
                 link: novoLink,
                 tabelas: novasTabelas,
                 id_workspaces: listaWorkspacesIds,
-                links_workspaces: linksPorWorkspace // Envia o dicionário de links
+                links_workspaces: linksPorWorkspace // <--- ENVIA O DICIONÁRIO AQUI
             })
         });
 
@@ -1435,8 +1628,18 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
     const checkboxes = document.querySelectorAll(`input[name="edit_workspaces_${idDashboard}"]:checked`);
     const listaWorkspacesIds = Array.from(checkboxes).map(cb => cb.value);
 
-    if (!novoNome || !novoLink) {
-        exibirNotificacaoErro("Nome e Link do Frame são obrigatórios.");
+    // CAPTURA E LIMPA OS LINKS INDIVIDUAIS
+    let linksPorWorkspace = {};
+    listaWorkspacesIds.forEach(wsId => {
+        const inputLink = document.querySelector(`input[name="edit_link_ws_${wsId}"]`);
+        if (inputLink && inputLink.value.trim() !== "") {
+            // Usa a função extrairLinkPuro para tirar a tag <iframe> e deixar só o https
+            linksPorWorkspace[wsId] = extrairLinkPuro(inputLink.value.trim());
+        }
+    });
+
+    if (!novoNome) {
+        exibirNotificacaoErro("O nome do relatório é obrigatório.");
         return;
     }
     if (listaWorkspacesIds.length === 0) {
@@ -1451,9 +1654,10 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
             body: JSON.stringify({
                 id_dashboard: idDashboard,
                 nome: novoNome,
-                link: novoLink,
+                link: extrairLinkPuro(novoLink), // Limpa o link global também
                 tabelas: novasTabelas,
-                id_workspaces: listaWorkspacesIds
+                id_workspaces: listaWorkspacesIds,
+                links_workspaces: linksPorWorkspace // <--- Envia os links exclusivos
             })
         });
 
@@ -1482,10 +1686,9 @@ function atalhoCommitNovaVersao(idDashboard, event) {
     if (inputNome && db.nome_dashboard) inputNome.value = db.nome_dashboard;
 }
 
-function redirecionarParaItem(tipo, nomeOuId, event) {
+function redirecionarParaItem(tipo, nomeOuId, linkEspecifico, event) {
     if (event) event.stopPropagation(); 
     const nomeLimpo = nomeOuId.replace(/\s*\(.*?\)/g, '').trim();
-    console.log("🔍 Buscando pelo nome real:", nomeLimpo);
 
     if (tipo === 'pbi') {
         document.getElementById("menuPowerBI").click();
@@ -1503,10 +1706,21 @@ function redirecionarParaItem(tipo, nomeOuId, event) {
                 if (textoLinha.includes(textoBusca)) {
                     clearInterval(abrirDashboard);
                     encontrou = true;
+                    
+                    // ATUALIZA O LINK NA MEMÓRIA ANTES DE ABRIR A AUDITORIA
+                    const idDash = tr.id.replace("tr-db-", "");
+                    const db = listaDashboardsCarregados.find(item => String(item.id_dashboard) === String(idDash));
+                    
+                    // Se veio um link específico e ele é válido, substitui o global
+                    if (db && linkEspecifico && linkEspecifico !== "undefined" && linkEspecifico !== "") {
+                        db.link_embed = linkEspecifico; 
+                    }
+
                     tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     tr.style.transition = "background-color 0.3s";
                     tr.style.backgroundColor = "#fef08a"; 
                     setTimeout(() => { tr.style.backgroundColor = ""; }, 1500); 
+
                     tr.click(); 
                     break;
                 }
@@ -1514,7 +1728,6 @@ function redirecionarParaItem(tipo, nomeOuId, event) {
 
             if (!encontrou && tentativas > 20) {
                 clearInterval(abrirDashboard);
-                console.warn("❌ O item ainda não foi encontrado.");
             }
         }, 200); 
 
@@ -1957,4 +2170,39 @@ function extrairLinkPuro(linkSujo) {
     
     // Se não for uma tag, mas tiver espaços em branco, remove os espaços
     return linkSujo.trim();
+}
+
+function aplicarPermissoes(user) {
+    const isAdmin = user.papel === 127;
+    
+    // Atualiza os dados do perfil no menu lateral
+    const userName = document.getElementById("userName");
+    const userCode = document.getElementById("userCode");
+    const badge = document.getElementById("userBadge");
+    
+    if (userName) userName.textContent = user.nome;
+    if (userCode) userCode.textContent = `LDAP: ${user.codigo_ldap}`;
+    if (badge) {
+        badge.textContent = isAdmin ? "Papel: Administrador" : "Papel: Visualizador";
+        badge.style.backgroundColor = isAdmin ? "#e2fbf0" : "#f1f5f9";
+        badge.style.color = isAdmin ? "#0f766e" : "#64748b";
+    }
+
+    // --- ESCONDE OS MENUS DE GESTÃO PARA QUEM NÃO É ADMIN ---
+    const adminMenuSection = document.getElementById("adminMenu");
+    const menuWorkspace = document.getElementById("menuWorkspace");
+    const menuUsuario = document.getElementById("menuUsuario");
+    const menuPowerBI = document.getElementById("menuPowerBI");
+
+    if (isAdmin) {
+        if (adminMenuSection) adminMenuSection.style.display = "block";
+        if (menuWorkspace) menuWorkspace.style.display = "flex";
+        if (menuUsuario) menuUsuario.style.display = "flex";
+        if (menuPowerBI) menuPowerBI.style.display = "flex";
+    } else {
+        if (adminMenuSection) adminMenuSection.style.display = "none";
+        if (menuWorkspace) menuWorkspace.style.display = "none";
+        if (menuUsuario) menuUsuario.style.display = "none";
+        if (menuPowerBI) menuPowerBI.style.display = "none";
+    }
 }

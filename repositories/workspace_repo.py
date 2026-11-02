@@ -126,3 +126,12 @@ def excluir_workspace(id_workspace):
         return False
     finally:
         conn.close()
+
+def buscar_links_por_workspace(id_dashboard):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_workspace, link_embed FROM Workspace_Dashboard WHERE id_dashboard = ?", (id_dashboard,))
+    rows = cursor.fetchall()
+    conn.close()
+    # Cria um dicionário: {"1": "http://link1", "2": "http://link2"}
+    return {str(row['id_workspace']): row['link_embed'] for row in rows}
