@@ -5,6 +5,12 @@ from controllers.api_controller import api_blueprint
 
 app = Flask(__name__)
 
+@app.after_request
+def add_header(response):
+    # Remove a restrição que impede o Iframe do Power BI de abrir
+    response.headers['X-Frame-Options'] = 'ALLOWALL'
+    return response
+
 # Inicializa o banco de dados e dados iniciais
 init_db()
 

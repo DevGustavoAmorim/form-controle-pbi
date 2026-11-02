@@ -17,10 +17,14 @@ def listar_workspaces_por_usuario(id_usuario):
     return [dict(row) for row in rows]
 
 def listar_todos_workspaces():
-    """Retorna todas as workspaces cadastradas para a tela de gestão técnica."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id_workspace, workspace_id_pbi, nome_comercial, descricao, data_criacao FROM Workspace ORDER BY nome_comercial ASC")
+    cursor.execute("""
+        SELECT w.id_workspace, w.workspace_id_pbi, w.nome_comercial, w.descricao, w.icone, w.data_criacao,
+        (SELECT COUNT(*) FROM Workspace_Dashboard wd WHERE wd.id_workspace = w.id_workspace) as qtd_dashboards
+        FROM Workspace w 
+        ORDER BY w.nome_comercial ASC
+    """)
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -57,13 +61,13 @@ def buscar_usuarios_por_workspace(id_workspace):
     conn.close()
     return [f"{row['nome']} ({row['codigo_ldap']})" for row in rows]
 
-def salvar_nova_workspace(nome, guid, descricao):
-    """Insere fisicamente um novo registro de workspace na base SQLite."""
+# Atualize a função salvar_nova_workspace
+def salvar_nova_workspace(nome, guid, descricao, icone="📁"):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO Workspace (workspace_id_pbi, nome_comercial, descricao) VALUES (?, ?, ?)",
-        (guid, nome, descricao)
+        "INSERT INTO Workspace (workspace_id_pbi, nome_comercial, descricao, icone) VALUES (?, ?, ?, ?)",
+        (guid, nome, descricao, icone)
     )
     conn.commit()
     conn.close()

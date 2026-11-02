@@ -50,6 +50,12 @@
                 <a href="#" class="menu-item" id="menuPowerBI">Cadastro de PowerBI</a>
             </div>
         </nav>
+
+        <div class="sidebar-logout" style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border-color);">
+            <button onclick="realizarLogout()" class="btn-logout" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background-color: #fef2f2; color: #b91c1c; border: 1px solid #fee2e2; border-radius: var(--radius-md); font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s;">
+                Sair do Sistema
+            </button>
+        </div>
     </aside>
 
     <!-- ÁREA CENTRAL DE CONTEÚDO -->
@@ -57,14 +63,36 @@
         <button class="btn-open-sidebar" id="btnOpenSidebar" title="Expandir Menu">☰</button>
 
         <!-- ABA 1: HOME / WORKSPACES GRID -->
+                <!-- ABA 1: HOME / WORKSPACES GRID -->
         <div class="tab-content active" id="tabHome">
-            <header class="content-header">
-                <h1>Meus Workspaces Autorizados</h1>
-                <p>Selecione o ambiente para visualizar os painéis alocados.</p>
+            <header class="content-header" style="margin-bottom: 24px;">
+                <!-- Breadcrumb (Sub Caminho) -->
+                <div id="homeBreadcrumb" style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                    <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h1 id="homeTitulo">Meus Workspaces Autorizados</h1>
+                        <p id="homeSubtitulo">Selecione o ambiente para visualizar os painéis alocados.</p>
+                    </div>
+                    <!-- Botão de Voltar (inicia escondido) -->
+                    <button id="btnVoltarHome" onclick="voltarParaRaizHome()" style="display: none; background: var(--primary-light); color: var(--primary); border: none; padding: 8px 16px; border-radius: var(--radius-md); font-weight: 600; cursor: pointer; align-items: center; gap: 8px;">
+                        ← Voltar
+                    </button>
+                </div>
             </header>
+
             <section class="workspaces-grid" id="workspacesGrid">
                 <!-- Injetado via JS -->
             </section>
+
+            <!-- Área de Visualização do Dashboard (inicia escondida) -->
+            <div id="homeDashboardView" style="display: none;">
+                <div class="pbi-frame-wrapper" style="width: 100%; height: 700px; background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--border-color); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <iframe id="homeIframe" src="" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>
+                </div>
+            </div>
         </div>
 
 <!----------------------------------------------------->        
@@ -109,7 +137,37 @@
                             <label>Finalidade / Descrição Técnica</label>
                             <textarea id="wsDescricao" rows="4" placeholder="Detalhes sobre os indicadores e objetivos deste ambiente..."></textarea>
                         </div>
-                        <button type="submit" class="btn-primary">Salvar Workspace</button>
+
+                        <!-- NOVO: Seletor de Ícone e Upload -->
+                        <div class="form-group">
+                            <label>Ícone do Ambiente (Escolha um padrão ou faça upload de um .png)</label>
+                            <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                                
+                                <!-- Select de Ícones Padrão -->
+                                <select id="wsIcone" style="flex: 1; min-width: 200px; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 14px; background: #f8fafc;">
+                                    <option value="📁">📁 Pasta Padrão</option>
+                                    <option value="📊">📊 Relatórios</option>
+                                    <option value="💰">💰 Financeiro</option>
+                                    <option value="👥">👥 RH</option>
+                                    <option value="🚚">🚚 Logística</option>
+                                    <option value="⚙️">⚙️ Operações</option>
+                                    <option value="🚀">🚀 Performance</option>
+                                    <option value="💡">💡 Inovação</option>
+                                </select>
+
+                                <!-- Upload de PNG -->
+                                <div style="flex: 1; min-width: 200px;">
+                                    <label for="wsIconeUpload" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: #ffffff; border: 1px dashed #94a3b8; border-radius: var(--radius-md); cursor: pointer; color: var(--text-muted); font-size: 13px; font-weight: 500; transition: 0.2s;">
+                                        <span>📤</span> Subir Imagem PNG
+                                    </label>
+                                    <input type="file" id="wsIconeUpload" accept="image/png" style="display: none;">
+                                </div>
+
+                            </div>
+                            <small id="wsIconePreviewText" style="color: var(--primary); font-size: 12px; margin-top: 8px; display: none;"></small>
+                        </div>
+
+                        <button type="submit" class="btn-primary" style="margin-top: 10px;">Salvar Workspace</button>
                     </form>
                 </div>
             </div>

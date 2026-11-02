@@ -11,23 +11,19 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Tabela de Usuários (Agora com senha)
+        # 1. Tabela de Usuários
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS Usuarios (
-            id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
-            codigo_ldap TEXT UNIQUE NOT NULL,
-            nome TEXT NOT NULL,
-            email TEXT NOT NULL,
-            senha TEXT NOT NULL, -- NOVA COLUNA
-            papel INTEGER NOT NULL,
+        CREATE TABLE IF NOT EXISTS Workspace (
+            id_workspace INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id_pbi TEXT UNIQUE NOT NULL,
+            nome_comercial TEXT NOT NULL,
+            descricao TEXT,
+            icone TEXT,
             data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
-    # MÁGICA DE SEGURANÇA: Verifica se a coluna senha já existe (para não quebrar bancos antigos)
     try:
-        cursor.execute("ALTER TABLE Usuarios ADD COLUMN senha TEXT;")
-        print("[Migração] Coluna 'senha' injetada com sucesso no SQLite!")
+        cursor.execute("ALTER TABLE Workspace ADD COLUMN icone TEXT;")
     except sqlite3.OperationalError:
         pass
 
@@ -47,9 +43,15 @@ def init_db():
             workspace_id_pbi TEXT UNIQUE NOT NULL,
             nome_comercial TEXT NOT NULL,
             descricao TEXT,
+            icone TEXT, -- NOVA COLUNA
             data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # Tenta adicionar a coluna caso o banco já exista
+    try:
+        cursor.execute("ALTER TABLE Workspace ADD COLUMN icone TEXT;")
+    except sqlite3.OperationalError:
+        pass
     
     # 3. Tabela de Dashboards (PowerBI)
     cursor.execute('''

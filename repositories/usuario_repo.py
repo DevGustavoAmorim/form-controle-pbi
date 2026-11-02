@@ -58,37 +58,6 @@ def listar_todos_usuarios():
     finally:
         conn.close()
 
-
-def cadastrar_usuario(nome, ldap, email, papel, lista_workspaces_ids):
-    """Insere o usuário e cria os vínculos na tabela Workspace_Usuarios."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Nome da tabela: Usuarios
-        cursor.execute("""
-            INSERT INTO Usuarios (codigo_ldap, nome, email, papel, data_criacao)
-            VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
-        """, (ldap, nome, email, papel))
-        
-        id_usuario_novo = cursor.lastrowid
-        
-        # Nome da tabela: Workspace_Usuarios
-        for ws_id in lista_workspaces_ids:
-            cursor.execute("""
-                INSERT INTO Workspace_Usuarios (id_workspace, id_usuario)
-                VALUES (?, ?)
-            """, (ws_id, id_usuario_novo))
-            
-        conn.commit()
-        return True, id_usuario_novo
-    except Exception as e:
-        conn.rollback()
-        print(f"[ERRO BANCO] Erro ao cadastrar usuário: {e}")
-        return False, str(e)
-    finally:
-        conn.close()
-
 def atualizar_usuario(id_usuario, nome, email, papel, lista_workspaces_ids):
     """Atualiza os dados do usuário e reconstrói os vínculos de workspaces."""
     conn = get_db_connection()
@@ -118,5 +87,62 @@ def atualizar_usuario(id_usuario, nome, email, papel, lista_workspaces_ids):
         conn.rollback()
         print(f"[ERRO BANCO] Erro ao atualizar usuário: {e}")
         return False
+    finally:
+        conn.close()
+
+def autenticar_usuario(usuario, senha, tipo="admin"):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_usuario, nome, codigo_ldap, email, senha, papel FROM Usuarios WHERE codigo_ldap = ?", (usuario,))
+    row = cursor.fetchone()
+    
+    if not row:
+        conn.close()
+        return None # Usuário não existe no banco
+
+    user_dict = dict(row)
+
+    # REGRA 1: Se for LDAP, o sistema confia que a senha foi validada pelo servidor da empresa.
+    if tipo == "ldap":
+        conn.close()
+        return user_dict
+
+    # REGRA 2: Se for Admin, valida a senha do banco.
+    if user_dict['codigo_ldap'].lower() == 'admin':
+        if user_dict.get('senha') == senha:
+            conn.close()
+            return user_dict
+        else:
+            conn.close()
+            return None
+            
+    return None
+
+
+def cadastrar_usuario(nome, ldap, email, papel, lista_workspaces_ids):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Não envia a senha (deixa NULL no banco para usuários LDAP)
+        cursor.execute("""
+            INSERT INTO Usuarios (codigo_ldap, nome, email, papel, data_criacao)
+            VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+        """, (ldap, nome, email, papel))
+        
+        id_usuario_novo = cursor.lastrowid
+        
+        for ws_id in lista_workspaces_ids:
+            cursor.execute("""
+                INSERT INTO Workspace_Usuarios (id_workspace, id_usuario)
+                VALUES (?, ?)
+            """, (ws_id, id_usuario_novo))
+            
+        conn.commit()
+        return True, id_usuario_novo
+    except Exception as e:
+        conn.rollback()
+        print(f"[ERRO BANCO] Erro ao cadastrar usuário: {e}")
+        return False, str(e)
     finally:
         conn.close()

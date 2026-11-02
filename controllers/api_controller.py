@@ -39,23 +39,21 @@ def listar_todas_workspaces():
 def criar_workspace():
     try:
         dados = request.get_json()
-        nome = dados.get('nome', '').strip() # Remove espaços extras
+        nome = dados.get('nome', '').strip()
         guid = dados.get('guid')
         descricao = dados.get('descricao')
+        icone = dados.get('icone', '📁') #
 
         if not nome or not guid:
             return jsonify({"error": "Nome e GUID são obrigatórios."}), 400
 
-        # AQUI ESTÁ A VALIDAÇÃO: Verifica se o nome já existe
         if workspace_repo.verificar_se_workspace_existe(nome):
             return jsonify({"error": "Já existe uma workspace cadastrada com este nome."}), 400
 
-        # Se passou, salva no banco
-        workspace_repo.salvar_nova_workspace(nome, guid, descricao)
+        workspace_repo.salvar_nova_workspace(nome, guid, descricao, icone)
         
         return jsonify({"success": True, "message": "Workspace cadastrada com sucesso."}), 201
     except Exception as e:
-        print(f"[ERRO] Falha ao cadastrar workspace: {e}")
         return jsonify({"error": str(e)}), 500
 
 #####################################################
@@ -420,5 +418,51 @@ def excluir_workspace():
             return jsonify({"success": True}), 200
         else:
             return jsonify({"error": "Erro ao excluir workspace."}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_blueprint.route('/api/login', methods=['POST'])
+def login():
+    try:
+        dados = request.get_json()
+        usuario = dados.get('username') 
+        senha = dados.get('password')
+        tipo = dados.get('tipo', 'admin') # Pega o tipo (ldap ou admin)
+
+        if not usuario or not senha:
+            return jsonify({"error": "Usuário e senha são obrigatórios."}), 400
+
+        # =====================================================================
+        # AQUI ENTRA A INTEGRAÇÃO REAL COM O LDAP NO FUTURO
+        # =====================================================================
+        if tipo == "ldap":
+            # Por enquanto, simulamos que o LDAP validou com sucesso.
+            # Futuramente, você substitui esse bloco por algo assim:
+            # 
+            # import ldap3
+            # server = ldap3.Server('ldap.suaempresa.com', get_info=ldap3.ALL)
+            # conn = ldap3.Connection(server, user=f'{usuario}@dominio', password=senha)
+            # if not conn.bind():
+            #     return jsonify({"error": "Senha incorreta no AD."}), 401
+            #
+            # -------------------------------------------------------------
+            
+            # Como estamos simulando, vamos apenas checar se o usuário existe no banco
+            # (A senha é ignorada nesta simulação, pois o "LDAP" já a validou)
+            pass 
+        else:
+            # Se for admin, a senha é validada pelo banco (como já fizemos)
+            pass
+
+        # =====================================================================
+        # BUSCA OS DADOS NO BANCO DE DADOS LOCAL (SQLite)
+        # =====================================================================
+        user_autenticado = usuario_repo.autenticar_usuario(usuario, senha, tipo)
+
+        if user_autenticado:
+            return jsonify({"success": True, "usuario": user_autenticado}), 200
+        else:
+            return jsonify({"error": "Usuário não cadastrado no portal."}), 401
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500

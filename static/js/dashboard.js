@@ -1,9 +1,13 @@
 /* ============================================================
-   HUB ALM - POWER BI / WORKSPACE MANAGER
-   Arquivo consolidado e ajustado.
+   HUB ALM - POWER BI / WORKSPACE MANAGER (CONSOLIDADO)
    ============================================================ */
 
 let listaDashboardsCarregados = [];
+let listaUsuariosCarregados = [];
+let iconeBase64Carregado = null;
+let wsIdParaExcluir = null;
+let idVersaoSelecionadaParaDeletar = null;
+let elementoTrLinhaCommitAtiva = null;
 
 // ------------------------------------------------------------
 // Helpers
@@ -27,11 +31,46 @@ function formatarData(dataIso) {
     return s.substring(0, 10);
 }
 
+function formatarDicionarioDados(textoBruto) {
+    if (!textoBruto) return "Nenhuma tabela indexada.";
+    let texto = textoBruto;
+    texto = texto.replace(/TABELA:/g, " TABELA:");
+    texto = texto.replace(/ TABELA:/g, "\n\nTABELA:");
+    texto = texto.replace(/\s-\s/g, "\n   - ");
+    return texto.trim();
+}
+
+function exibirNotificacaoSucesso(mensagem) {
+    const toast = document.getElementById("toastSuccess");
+    const toastMsg = document.getElementById("toastMessage");
+    if (!toast || !toastMsg) return;
+    toastMsg.textContent = mensagem;
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 4000);
+}
+
+function exibirNotificacaoErro(mensagem) {
+    const toast = document.getElementById("toastError");
+    const toastMsg = document.getElementById("toastErrorMessage");
+    if (!toast || !toastMsg) return;
+    toastMsg.textContent = mensagem;
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 5000);
+}
+
 // ------------------------------------------------------------
-// Bootstrap
+// DOMContentLoaded (ÚNICO)
 // ------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", function () {
-    // 1. Sidebar
+    // 1. Proteção de Acesso
+    const userStorage = localStorage.getItem("usuarioLogado");
+    if (!userStorage) {
+        window.location.href = "/";
+        return;
+    }
+    const usuarioLogado = JSON.parse(userStorage);
+
+    // 2. Sidebar
     const btnCloseSidebar = document.getElementById("btnCloseSidebar");
     const btnOpenSidebar = document.getElementById("btnOpenSidebar");
     const sidebar = document.getElementById("sidebar");
@@ -53,7 +92,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 2. Menu principal (SPA)
+    // 3. Menu principal (SPA)
     const mapeamentoMenus = [
         { botao: document.getElementById("menuHome"), aba: document.getElementById("tabHome") },
         { botao: document.getElementById("menuWorkspace"), aba: document.getElementById("tabWorkspace") },
@@ -61,7 +100,7 @@ document.addEventListener("DOMContentLoaded", function () {
         { botao: document.getElementById("menuPowerBI"), aba: document.getElementById("tabPowerBI") }
     ];
 
-        mapeamentoMenus.forEach(item => {
+    mapeamentoMenus.forEach(item => {
         if (!item.botao) return;
         item.botao.addEventListener("click", function (e) {
             e.preventDefault();
@@ -74,37 +113,75 @@ document.addEventListener("DOMContentLoaded", function () {
 
             if (item.botao.id === "menuWorkspace") renderizarTabelaWorkspaces();
             if (item.botao.id === "menuPowerBI") renderizarTabelaDashboards();
-            if (item.botao.id === "menuUsuario") renderizarTabelaUsuarios(); // <--- ADICIONE ESTA LINHA
+            if (item.botao.id === "menuUsuario") renderizarTabelaUsuarios();
         });
     });
 
-    // 3. Sub-abas
+    // 4. Sub-abas
     configurarSubAbasWorkspace();
     configurarSubAbasPowerBI();
     configurarSubAbasUsuario();
 
-    // 4. Formulários
+    // 5. Formulários
     configurarFormularios();
 
-    // 5. Input de arquivo PBIx
+    // 6. Input de arquivo PBIx
     configurarInputArquivoPBIx();
 
-    // 6. Modais (delete + details) — unificados aqui
+    // 7. Configurar Upload de Ícone PNG
+    const inputUploadIcone = document.getElementById("wsIconeUpload");
+    if (inputUploadIcone) {
+        inputUploadIcone.addEventListener("change", function(e) {
+            const arquivo = e.target.files[0];
+            if (!arquivo) return;
+
+            if (arquivo.type !== "image/png") {
+                exibirNotificacaoErro("Por favor, envie apenas arquivos PNG.");
+                this.value = "";
+                return;
+            }
+
+            if (arquivo.size > 1024 * 1024) {
+                exibirNotificacaoErro("A imagem deve ter no máximo 1MB.");
+                this.value = "";
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                iconeBase64Carregado = event.target.result; 
+                const txtPreview = document.getElementById("wsIconePreviewText");
+                if (txtPreview) {
+                    txtPreview.textContent = "✅ Imagem personalizada carregada com sucesso!";
+                    txtPreview.style.display = "block";
+                }
+                document.getElementById("wsIcone").value = "";
+            };
+            reader.readAsDataURL(arquivo);
+        });
+    }
+
+    // 8. Modais
     configurarModais();
 
-    // 7. Carga inicial da home
-    carregarDadosPainel("u123456");
+    // 9. Carga inicial da home
+    carregarDadosPainel(usuarioLogado.codigo_ldap);
+    
+    // 10. Atualiza o perfil na barra lateral
+    const elNome = document.getElementById("userName");
+    if (elNome) elNome.textContent = usuarioLogado.nome;
+    const elCode = document.getElementById("userCode");
+    if (elCode) elCode.textContent = `LDAP: ${usuarioLogado.codigo_ldap}`;
 });
 
 // ------------------------------------------------------------
-// Sub-abas Workspace
+// Sub-abas
 // ------------------------------------------------------------
 function configurarSubAbasWorkspace() {
     const btnListar = document.getElementById("subTabListarWS");
     const btnNovo = document.getElementById("subTabNovoWS");
     const secListar = document.getElementById("secListarWS");
     const secNovo = document.getElementById("secNovoWS");
-
     if (!btnListar || !btnNovo) return;
 
     btnListar.addEventListener("click", function () {
@@ -123,15 +200,11 @@ function configurarSubAbasWorkspace() {
     });
 }
 
-// ------------------------------------------------------------
-// Sub-abas Power BI
-// ------------------------------------------------------------
 function configurarSubAbasPowerBI() {
     const btnListarBI = document.getElementById("subTabListarBI");
     const btnNovoBI = document.getElementById("subTabNovoBI");
     const secListarBI = document.getElementById("secListarBI");
     const secNovoBI = document.getElementById("secNovoBI");
-
     if (!btnListarBI || !btnNovoBI) return;
 
     btnListarBI.addEventListener("click", function (e) {
@@ -153,6 +226,31 @@ function configurarSubAbasPowerBI() {
     });
 }
 
+function configurarSubAbasUsuario() {
+    const btnListar = document.getElementById("subTabListarUser");
+    const btnNovo = document.getElementById("subTabNovoUser");
+    const secListar = document.getElementById("secListarUser");
+    const secNovo = document.getElementById("secNovoUser");
+    if (!btnListar || !btnNovo) return;
+
+    btnListar.addEventListener("click", function () {
+        btnListar.classList.add("active");
+        btnNovo.classList.remove("active");
+        secListar.classList.add("active");
+        secNovo.classList.remove("active");
+        renderizarTabelaUsuarios();
+    });
+
+    btnNovo.addEventListener("click", function () {
+        btnNovo.classList.add("active");
+        btnListar.classList.remove("active");
+        secNovo.classList.add("active");
+        secListar.classList.remove("active");
+        document.getElementById("formUsuario").reset();
+        carregarWorkspacesNoFormUsuario(); 
+    });
+}
+
 // ------------------------------------------------------------
 // Formulários
 // ------------------------------------------------------------
@@ -166,7 +264,6 @@ function configurarFormularios() {
             const inputNome = document.getElementById("wsNomeComercial");
             const nomeDigitado = inputNome.value.trim();
 
-            // VALIDAÇÃO FRONTEND: Verifica se o nome já está na lista visível
             const workspacesExistentes = Array.from(document.querySelectorAll(".ws-row td strong")).map(el => el.innerText.trim().toLowerCase());
             if (workspacesExistentes.includes(nomeDigitado.toLowerCase())) {
                 exibirNotificacaoErro("Este nome de Workspace já está em uso. Escolha outro.");
@@ -174,13 +271,16 @@ function configurarFormularios() {
                 return;
             }
 
-            const guidAuto = (document.getElementById("wsIdPbi")?.value || "").trim()
-                || ("auto-ws-" + Math.random().toString(36).substring(2, 15));
+            const guidAuto = "auto-ws-" + Math.random().toString(36).substring(2, 15);
+
+            const iconeEmoji = document.getElementById("wsIcone").value;
+            const iconeFinal = iconeBase64Carregado ? iconeBase64Carregado : iconeEmoji;
 
             const payload = {
                 nome: nomeDigitado,
                 guid: guidAuto,
-                descricao: document.getElementById("wsDescricao").value
+                descricao: document.getElementById("wsDescricao").value,
+                icone: iconeFinal
             };
 
             try {
@@ -193,6 +293,9 @@ function configurarFormularios() {
                 if (response.ok) {
                     exibirNotificacaoSucesso("Workspace cadastrada com sucesso!");
                     formWS.reset();
+                    iconeBase64Carregado = null;
+                    const txtPreview = document.getElementById("wsIconePreviewText");
+                    if (txtPreview) txtPreview.style.display = "none";
                     document.getElementById("subTabListarWS")?.click();
                 } else {
                     const err = await response.json();
@@ -248,9 +351,7 @@ function configurarFormularios() {
 
                 if (response.ok) {
                     const resultado = await response.json();
-                    exibirNotificacaoSucesso(
-                        `Commit realizado! Registrado como ${resultado.versao_gerada}. Fontes mapeadas com sucesso.`
-                    );
+                    exibirNotificacaoSucesso(`Commit realizado! Registrado como ${resultado.versao_gerada}. Fontes mapeadas com sucesso.`);
                     formPBI.reset();
                     document.getElementById("fileInfoArea")?.classList.add("hidden");
                     const containerWS = document.getElementById("containerSeletorWorkspaces");
@@ -272,7 +373,7 @@ function configurarFormularios() {
         });
     }
 
-    // 3. FORMULÁRIO DE USUÁRIO (Agora integrado com o Python)
+    // 3. FORMULÁRIO DE USUÁRIO
     const formUsuario = document.getElementById("formUsuario");
     if (formUsuario) {
         formUsuario.addEventListener("submit", async function (e) {
@@ -283,7 +384,6 @@ function configurarFormularios() {
             const email = document.getElementById("userEmail").value.trim();
             const papel = document.getElementById("userRole").value;
             
-            // Pega as checkboxes de workspaces que o usuário marcou
             const checkboxes = document.querySelectorAll('input[name="user_workspaces"]:checked');
             const workspacesIds = Array.from(checkboxes).map(cb => cb.value);
 
@@ -308,7 +408,7 @@ function configurarFormularios() {
                 if (response.ok) {
                     exibirNotificacaoSucesso("Usuário cadastrado com sucesso!");
                     formUsuario.reset();
-                    document.getElementById("subTabListarUser")?.click(); // Volta para a lista
+                    document.getElementById("subTabListarUser")?.click();
                 } else {
                     const err = await response.json();
                     exibirNotificacaoErro(err.error || "Erro ao cadastrar usuário.");
@@ -375,9 +475,6 @@ function configurarInputArquivoPBIx() {
 // ------------------------------------------------------------
 // Modais
 // ------------------------------------------------------------
-let idVersaoSelecionadaParaDeletar = null;
-let elementoTrLinhaCommitAtiva = null;
-
 function configurarModais() {
     const modalDelete = document.getElementById("deleteModal");
     const btnCancel = document.getElementById("btnCancelModal");
@@ -449,7 +546,6 @@ function configurarModais() {
         });
     }
 
-    // Modal de detalhes da deleção
     const modalDetails = document.getElementById("detailsModal");
     const btnCloseDetailsX = document.getElementById("btnCloseDetailsX");
     const btnCloseDetailsBtn = document.getElementById("btnCloseDetailsBtn");
@@ -459,71 +555,200 @@ function configurarModais() {
 }
 
 // ------------------------------------------------------------
-// Home — dados do painel
+// HOME — Navegação em 3 Níveis (Workspace -> Dashboards -> Iframe)
 // ------------------------------------------------------------
 async function carregarDadosPainel(codigoLdap) {
     try {
-        const response = await fetch(`/api/workspaces/${codigoLdap}`);
-        if (!response.ok) throw new Error("Erro de resposta.");
-        const data = await response.json();
+        const userStorage = localStorage.getItem("usuarioLogado");
+        const usuarioLogado = JSON.parse(userStorage);
+        const isAdmin = usuarioLogado && usuarioLogado.papel === 127;
+
+        let workspacesParaMostrar = [];
+
+        if (isAdmin) {
+            const response = await fetch('/api/workspaces');
+            workspacesParaMostrar = await response.json();
+        } else {
+            const response = await fetch(`/api/workspaces/${codigoLdap}`);
+            const data = await response.json();
+            workspacesParaMostrar = data.workspaces || [];
+        }
 
         const userName = document.getElementById("userName");
         const userCode = document.getElementById("userCode");
         const badge = document.getElementById("userBadge");
-        const adminMenu = document.getElementById("adminMenu");
-
-        if (userName) userName.textContent = "Administrador PBI";
-        if (userCode) userCode.textContent = `LDAP: ${codigoLdap}`;
-        if (badge) badge.textContent = `Papel: ${data.papel}`;
-
-        if (data.is_admin) {
-            if (adminMenu) adminMenu.style.display = "flex";
-            if (badge) {
-                badge.style.backgroundColor = "#e2fbf0";
-                badge.style.color = "#0f766e";
-            }
-        } else {
-            if (adminMenu) adminMenu.style.display = "none";
-        }
+        
+        if (userName && usuarioLogado) userName.textContent = usuarioLogado.nome;
+        if (userCode && usuarioLogado) userCode.textContent = `LDAP: ${usuarioLogado.codigo_ldap}`;
+        if (badge && usuarioLogado) badge.textContent = isAdmin ? "Papel: Administrador" : "Papel: Visualizador";
 
         const grid = document.getElementById("workspacesGrid");
         if (!grid) return;
         grid.innerHTML = "";
 
-        if (!data.workspaces || data.workspaces.length === 0) {
-            grid.innerHTML = "<p class='text-muted'>Nenhum ambiente localizado para o seu acesso.</p>";
+        if (!workspacesParaMostrar || workspacesParaMostrar.length === 0) {
+            grid.innerHTML = "<p class='text-muted'>Nenhum ambiente localizado.</p>";
             return;
         }
 
-        data.workspaces.forEach(ws => {
+        workspacesParaMostrar.forEach(ws => {
             const card = document.createElement("div");
-            card.className = "workspace-card";
+            card.className = "workspace-card-home";
 
-            card.onclick = () => {
-                document.getElementById("menuWorkspace")?.click();
-                setTimeout(() => {
-                    const idWs = ws.id_workspace ?? ws.id;
-                    const tr = document.getElementById(`tr-ws-${idWs}`);
-                    if (tr) tr.click();
-                }, 150);
-            };
+            // NÍVEL 1: Clicar no card abre a pasta do Workspace (Nível 2)
+            card.onclick = () => abrirWorkspaceHome(ws);
+
+            const icone = ws.icone || "📁"; 
+            const qtdDashs = ws.qtd_dashboards !== undefined ? ws.qtd_dashboards : 0;
+
+            let iconeHTML = "";
+            if (icone.startsWith("data:image")) {
+                iconeHTML = `<img src="${icone}" alt="Ícone" style="width: 100%; height: 100%; object-fit: contain; border-radius: var(--radius-md);">`;
+            } else {
+                iconeHTML = icone;
+            }
 
             card.innerHTML = `
-                <div class="card-title">${escapeHtml(ws.nome || "")}</div>
-                <div class="card-desc">${escapeHtml(ws.descricao || "Sem especificações.")}</div>
+                <div class="card-icon-large" style="overflow: hidden; padding: 10px;">${iconeHTML}</div>
+                <div class="card-info">
+                    <div class="card-info-title">${escapeHtml(ws.nome_comercial || ws.nome || "")}</div>
+                    <div class="card-info-desc">${escapeHtml(ws.descricao || "Sem descrição.")}</div>
+                    <div class="card-badge-dashs">📊 ${qtdDashs} relatórios</div>
+                </div>
             `;
             grid.appendChild(card);
         });
+
     } catch (error) {
         console.error("Erro interno detectado:", error);
-        const grid = document.getElementById("workspacesGrid");
-        if (grid) {
-            grid.innerHTML = `<p style="color:#b91c1c; font-size:14px;">
-                Falha crítica ao conectar com a camada Service/Repository.</p>`;
-        }
     }
 }
 
+// NÍVEL 2: Abrir a "Pasta" do Workspace
+async function abrirWorkspaceHome(ws) {
+    // Atualiza o visual da tela
+    document.getElementById("homeTitulo").textContent = ws.nome_comercial || ws.nome;
+    document.getElementById("homeSubtitulo").textContent = ws.descricao || "Selecione um painel para visualizar.";
+    document.getElementById("btnVoltarHome").style.display = "flex";
+    document.getElementById("workspacesGrid").style.display = "none";
+    
+    // Atualiza o Breadcrumb
+    const breadcrumb = document.getElementById("homeBreadcrumb");
+    breadcrumb.innerHTML = `
+        <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
+        <span> / </span>
+        <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(ws.nome_comercial || ws.nome)}</span>
+    `;
+
+    // Prepara o container dos dashboards
+    const containerDashs = document.getElementById("homeDashboardView");
+    containerDashs.style.display = "none"; // Garante que o iframe grande esteja escondido
+
+    // Cria a div onde os mini cards dos dashboards vão ficar
+    let gridDashs = document.getElementById("homeDashboardsGrid");
+    if (!gridDashs) {
+        gridDashs = document.createElement("div");
+        gridDashs.id = "homeDashboardsGrid";
+        gridDashs.className = "dashboards-grid";
+        containerDashs.parentNode.insertBefore(gridDashs, containerDashs);
+    }
+    gridDashs.style.display = "grid";
+    gridDashs.innerHTML = "<p class='text-muted'>Carregando painéis...</p>";
+
+    try {
+        // Busca os dashboards que estão dentro desse workspace
+        // Como o seu backend não tem uma rota específica para isso, vamos buscar todos e filtrar
+        const response = await fetch('/api/dashboards');
+        const todosDashboards = await response.json();
+        
+        // Filtra os dashboards que pertencem à workspace (usando o nome_workspace como filtro)
+        const dashboardsDoWs = todosDashboards.filter(d => 
+            d.nome_workspace && d.nome_workspace.includes(ws.nome_comercial)
+        );
+
+        gridDashs.innerHTML = "";
+
+        if (dashboardsDoWs.length === 0) {
+            gridDashs.innerHTML = "<p class='text-muted' style='grid-column: 1/-1;'>Nenhum dashboard alocado nesta workspace.</p>";
+            return;
+        }
+
+        dashboardsDoWs.forEach(db => {
+            const miniCard = document.createElement("div");
+            miniCard.className = "dashboard-card-mini";
+            
+            const linkLimpo = extrairLinkPuro(db.link_embed);
+
+            miniCard.innerHTML = `
+                <div class="mini-iframe-preview">
+                    <iframe src="${linkLimpo}" scrolling="no"></iframe>
+                </div>
+                <div class="dashboard-mini-title">${escapeHtml(db.nome_dashboard)}</div>
+            `;
+
+            // NÍVEL 3: Clicar no mini card abre o frame expandido
+            miniCard.onclick = () => abrirDashboardHome(db, ws);
+            gridDashs.appendChild(miniCard);
+        });
+
+    } catch (error) {
+        console.error("Erro ao buscar dashboards:", error);
+        gridDashs.innerHTML = "<p style='color:red;'>Erro ao carregar os dashboards.</p>";
+    }
+}
+
+// NÍVEL 3: Expandir o Dashboard
+function abrirDashboardHome(db, ws) {
+    document.getElementById("homeDashboardsGrid").style.display = "none";
+    
+    // Atualiza o Breadcrumb
+    const breadcrumb = document.getElementById("homeBreadcrumb");
+    breadcrumb.innerHTML = `
+        <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
+        <span> / </span>
+        <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="abrirWorkspaceHome(${JSON.stringify(ws).replace(/"/g, '&quot;')})">${escapeHtml(ws.nome_comercial || ws.nome)}</span>
+        <span> / </span>
+        <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(db.nome_dashboard)}</span>
+    `;
+
+    document.getElementById("homeTitulo").textContent = db.nome_dashboard;
+    document.getElementById("homeSubtitulo").textContent = "Visualização do relatório em tela cheia.";
+
+    // Exibe o iframe grande
+    const containerDashs = document.getElementById("homeDashboardView");
+    containerDashs.style.display = "block";
+    
+    // Limpa o link e joga no iframe
+    document.getElementById("homeIframe").src = extrairLinkPuro(db.link_embed);
+}
+
+// Função para voltar tudo para a raiz (botão de voltar)
+function voltarParaRaizHome() {
+    // Limpa iframe
+    document.getElementById("homeIframe").src = "";
+    
+    // Esconde as visualizações
+    document.getElementById("homeDashboardView").style.display = "none";
+    const gridDashs = document.getElementById("homeDashboardsGrid");
+    if (gridDashs) gridDashs.style.display = "none";
+    
+    // Mostra a grade de Workspaces
+    document.getElementById("workspacesGrid").style.display = "grid";
+    
+    // Reseta os títulos
+    document.getElementById("homeTitulo").textContent = "Meus Workspaces Autorizados";
+    document.getElementById("homeSubtitulo").textContent = "Selecione o ambiente para visualizar os painéis alocados.";
+    document.getElementById("btnVoltarHome").style.display = "none";
+    
+    // Reseta o Breadcrumb
+    document.getElementById("homeBreadcrumb").innerHTML = `
+        <span style="cursor: pointer; color: var(--primary); font-weight: 600;">🏠 Meus Workspaces</span>
+    `;
+
+    // Recarrega os cards iniciais (caso tenha mudado algo)
+    const codigoLdap = JSON.parse(localStorage.getItem("usuarioLogado")).codigo_ldap;
+    carregarDadosPainel(codigoLdap);
+}
 // ------------------------------------------------------------
 // Workspaces — listagem + auditoria inline
 // ------------------------------------------------------------
@@ -614,7 +839,6 @@ function toggleAuditoriaInline(ws, trWS, tbody) {
             </li>`).join("")
         : "<li style='font-size: 13px; color: var(--text-muted); background: transparent; border: none;'>Nenhum usuário liberado neste ambiente</li>";
 
-    // CORREÇÃO: O botão de excluir agora usa data-id e data-nome para evitar erros de string
     trAudit.innerHTML = `
         <td colspan="2" style="padding:0 !important; background-color:#f8fafc;">
             <div class="audit-inline-container" style="flex-direction: column !important; gap: 24px !important; padding: 24px 32px !important;">
@@ -628,11 +852,8 @@ function toggleAuditoriaInline(ws, trWS, tbody) {
                                 style="background: var(--primary-light); color: var(--primary); border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">
                             ✏️ Editar
                         </button>
-                        <!-- Botão de Excluir Corrigido -->
-                        <button type="button" 
-                                data-id="${ws.id_workspace}" 
-                                data-nome="${escapeHtml(ws.nome_comercial).replace(/'/g, "\\'")}" 
-                                onclick="event.stopPropagation(); excluirWorkspace(this, event)" 
+                        
+                        <button onclick="event.stopPropagation(); abrirModalExclusao(${ws.id_workspace}, '${escapeHtml(ws.nome_comercial).replace(/'/g, "\\'")}', event)" 
                                 style="background: #fee2e2; color: #991b1b; border:none; padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">
                             🗑️ Excluir
                         </button>
@@ -656,6 +877,67 @@ function toggleAuditoriaInline(ws, trWS, tbody) {
         </td>`;
 
     trWS.insertAdjacentElement("afterend", trAudit);
+}
+
+function abrirModalExclusao(idWorkspace, nomeWorkspace, event) {
+    if (event) event.stopPropagation(); 
+    wsIdParaExcluir = idWorkspace;
+
+    const modalAntigo = document.getElementById("deleteWsModalDinamico");
+    if (modalAntigo) modalAntigo.remove();
+
+    const modalHTML = `
+        <div class="custom-modal-overlay" id="deleteWsModalDinamico" style="display: flex; z-index: 999999;">
+            <div class="custom-modal-box">
+                <div class="modal-header-danger">
+                    <h3>Excluir Workspace</h3>
+                    <button class="btn-close-modal" onclick="document.getElementById('deleteWsModalDinamico').remove()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p style="color:var(--text-main); font-size:14px; line-height: 1.5;">
+                        Tem certeza que deseja excluir a workspace <strong>${nomeWorkspace}</strong>?
+                    </p>
+                    <p style="color:#b91c1c; font-size:12px; margin-top:8px; font-weight: 500;">
+                        ⚠️ Atenção: Todos os vínculos de usuários e dashboards com este ambiente serão removidos permanentemente.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-modal-cancel" onclick="document.getElementById('deleteWsModalDinamico').remove()">Cancelar</button>
+                    <button class="btn-modal-confirm" id="btnConfirmDeleteWsDinamico">Sim, Excluir</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    document.getElementById("btnConfirmDeleteWsDinamico").addEventListener("click", async function() {
+        if (!wsIdParaExcluir) return;
+        
+        const btn = this;
+        btn.textContent = "Excluindo...";
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/workspaces/excluir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_workspace: wsIdParaExcluir })
+            });
+
+            if (response.ok) {
+                document.getElementById('deleteWsModalDinamico').remove();
+                exibirNotificacaoSucesso("Workspace excluída com sucesso!");
+                renderizarTabelaWorkspaces();
+            } else {
+                exibirNotificacaoErro("Erro ao excluir a workspace no servidor.");
+            }
+        } catch (error) {
+            exibirNotificacaoErro("Falha de comunicação com o servidor.");
+        } finally {
+            wsIdParaExcluir = null;
+        }
+    });
 }
 
 // ------------------------------------------------------------
@@ -739,6 +1021,7 @@ function toggleAuditoriaBIInline(db, trDB, tbody) {
     // ----- Histórico de commits -----
     let linhasCommits = "";
     const commits = Array.isArray(db.commits) ? db.commits : [];
+    const nomePainel = db.nome_dashboard || "Relatorio";
 
     if (commits.length > 0) {
         commits.forEach(c => {
@@ -754,34 +1037,38 @@ function toggleAuditoriaBIInline(db, trDB, tbody) {
                 const payloadEncoded = encodeURIComponent(JSON.stringify(c));
                 btnAcao = `<a href="javascript:void(0);"
                     onclick="exibirDetalhesDelecao('${payloadEncoded}', event)"
-                    style="color:#b91c1c; font-size:11px; font-weight:600; text-decoration:underline; cursor:pointer;">
+                    style="color:#b91c1c; font-size:12px; font-weight:600; text-decoration:underline; cursor:pointer; display: inline-block; padding: 4px;">
                     Ver Detalhes do Descarte</a>`;
             } else {
-                btnAcao = `<div style="display:flex; gap:8px; align-items:center;">
+                btnAcao = `<div style="display:flex; gap:8px; align-items:center; justify-content: center;">
                     <button onclick="event.stopPropagation(); window.location.href='/api/dashboards/versao/download/${c.id_versao}';"
-                        style="background-color:#0284c7; color:#fff; border:none; padding:6px 10px; border-radius:4px;
-                        cursor:pointer; font-weight:600; font-size:11px; min-width:65px;">
+                        style="background-color:#0284c7; color:#fff; border:none; padding:6px 12px; border-radius:4px;
+                        cursor:pointer; font-weight:600; font-size:12px; white-space: nowrap;">
                         📥 Baixar</button>
                     <button onclick="executarDescarteBinario(${c.id_versao}, event)"
-                        style="background-color:#fee2e2; color:#991b1b; border:none; padding:6px 10px; border-radius:4px;
-                        cursor:pointer; font-weight:500; font-size:11px; min-width:85px;">
+                        style="background-color:#fee2e2; color:#991b1b; border:none; padding:6px 12px; border-radius:4px;
+                        cursor:pointer; font-weight:500; font-size:12px; white-space: nowrap;">
                         Excluir Binário</button>
                 </div>`;
             }
 
+            // Montagem da linha com os textos solicitados
             linhasCommits += `
                 <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:12px 8px; vertical-align:top;">
-                        <strong>${escapeHtml(c.numero_versao || "")}</strong>
+                    <td style="padding:16px 12px; vertical-align:middle; text-align:left;">
+                        <span style="font-size:13px; font-weight:600; color:var(--text-main);">${escapeHtml(nomePainel)}.pbix</span>
+                        <span style="display:inline-block; margin-left:8px; background:var(--primary-light); color:var(--primary); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">
+                            ${escapeHtml(c.numero_versao || "")}
+                        </span>
                     </td>
-                    <td style="padding:12px 8px; vertical-align:top; color:var(--text-muted);">${data}</td>
-                    <td style="padding:12px 8px; vertical-align:top; font-size:11px;">
-                        ${statusBlob}
-                        <small style="color:#475569; display:block; margin-top:4px; font-style:italic; font-weight:500;">
+                    <td style="padding:16px 12px; vertical-align:middle; color:var(--text-muted); text-align:center;">${data}</td>
+                    <td style="padding:16px 12px; vertical-align:middle; font-size:12px; text-align:left;">
+                        <div style="margin-bottom:4px;">${statusBlob}</div>
+                        <small style="color:#475569; font-style:italic; font-weight:500;">
                             📝 Resumo: ${resumo}
                         </small>
                     </td>
-                    <td style="padding:12px 8px; vertical-align:top;">${btnAcao}</td>
+                    <td style="padding:16px 12px; vertical-align:middle; text-align:center;">${btnAcao}</td>
                 </tr>`;
         });
     } else {
@@ -790,20 +1077,16 @@ function toggleAuditoriaBIInline(db, trDB, tbody) {
 
     // ----- Bloco de tabelas -----
     const textoBruto = db.tabelas_utilizadas_texto || db.tabelas_utilizadas || "Nenhuma tabela indexada.";
-    
-    // Aplica a formatação de árvore
     const textoFormatado = formatarDicionarioDados(textoBruto);
 
-    // Usa white-space: pre-wrap para garantir que o layout de texto seja mantido na tela
     const listaTabelasHTML = `
         <div style="font-family:'Fira Code','Courier New',monospace; font-size:13px; color:#0f172a;
             background-color:#f8fafc; padding:18px; border-radius:8px; border:1px solid #cbd5e1;
             line-height:1.6; max-height:280px; overflow-y:auto; white-space:pre-wrap; margin:0;
             box-shadow:inset 0 2px 4px rgba(0,0,0,0.02);">
 ${escapeHtml(textoFormatado)}</div>`;
-        
-    // AQUI FOI FEITA A REORDENAÇÃO DOS BLOCOS (Governança -> Iframe -> Histórico)
-    trAudit.innerHTML = `
+
+        trAudit.innerHTML = `
         <td colspan="4">
             <div id="edit-block-db-${db.id_dashboard}" class="bi-audit-container"
                  style="padding:24px 32px; display:flex; flex-direction:column; gap:24px;
@@ -811,15 +1094,18 @@ ${escapeHtml(textoFormatado)}</div>`;
 
                 <!-- 1. INFORMAÇÕES DE GOVERNANÇA E TABELAS -->
                 <div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.5px; font-weight:700;">
+                    <!-- Cabeçalho com botões, usando flex-wrap para não estourar a tela -->
+                    <div style="display:flex; flex-wrap: wrap; justify-content:space-between; align-items:center; gap: 12px; margin-bottom:16px; width: 100%;">
+                        <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.5px; font-weight:700; margin: 0;">
                             📋 Informações de Governança</h4>
-                        <div style="display:flex; gap:10px;">
-                            <button onclick="atalhoCommitNovaVersao(${db.id_dashboard}, event)"
+                        
+                        <!-- Botões com flex-shrink: 0 para não sumirem -->
+                        <div style="display:flex; gap:10px; flex-shrink: 0;">
+                            <button onclick="event.stopPropagation(); atalhoCommitNovaVersao(${db.id_dashboard}, event)"
                                 style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0;
                                 padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">
                                 🚀 Commit de Nova Versão</button>
-                            <button onclick="ativarModoEdicaoDB(${db.id_dashboard}, event)"
+                            <button onclick="event.stopPropagation(); ativarModoEdicaoDB(${db.id_dashboard}, event)"
                                 style="background:var(--primary-light); color:var(--primary); border:none;
                                 padding:6px 12px; border-radius:6px; font-weight:600; font-size:12px; cursor:pointer;">
                                 ✏️ Editar Cadastro</button>
@@ -847,7 +1133,7 @@ ${escapeHtml(textoFormatado)}</div>`;
                         <p style="font-size:12px; font-family:monospace; color:var(--text-muted);
                             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:#fff;
                             padding:6px; border-radius:4px; border:1px solid var(--border-color);">
-                            ${escapeHtml(db.link_embed || "")}</p>
+                            ${escapeHtml(extrairLinkPuro(db.link_embed))}</p>
                     </div>
 
                     <div style="background:#fff; border:1px solid var(--border-color); padding:16px; border-radius:8px;">
@@ -864,32 +1150,38 @@ ${escapeHtml(textoFormatado)}</div>`;
                     <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
                         🖼️ Visualização do Relatório (Homologação / Iframe Ativo)</h4>
                     <div class="pbi-frame-wrapper"
-                         style="width:100%; height:450px; background:#e2e8f0; border-radius:8px;
-                                overflow:hidden; border:1px solid var(--border-color);">
-                        <iframe src="${escapeHtml(db.link_embed || "")}" title="Relatório Power BI"
-                                style="width:100%; height:100%; border:none;" allowfullscreen></iframe>
+                         style="width:100%; height:600px; background:#e2e8f0; border-radius:8px;
+                                overflow:hidden; border:1px solid var(--border-color); position: relative; z-index: 1;">
+                        <iframe src="${extrairLinkPuro(db.link_embed)}" 
+                                title="Relatório Power BI"
+                                style="width:100%; height:100%; border:none; display: block;" 
+                                allowfullscreen 
+                                webkitallowfullscreen 
+                                mozallowfullscreen>
+                        </iframe>
                     </div>
                 </div>
 
-                <!-- 3. HISTÓRICO DE COMMITS COM SCROLL -->
+                <!-- 3. HISTÓRICO DE COMMITS -->
                 <div>
                     <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">
                         📜 Histórico de Commits e Controle de Versão</h4>
-                    <div style="max-height: 440px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px;">
-                        <table class="version-control-table"
-                               style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
-                            <thead style="position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                                <tr style="background-color:#f1f5f9; color:var(--text-muted);">
-                                    <th style="padding:10px 8px; background-color:#f1f5f9;">Versão</th>
-                                    <th style="padding:10px 8px; background-color:#f1f5f9;">Data Commit</th>
-                                    <th style="padding:10px 8px; background-color:#f1f5f9;">Status / Detalhes do Commit</th>
-                                    <th style="padding:10px 8px; background-color:#f1f5f9;">Ações</th>
+                    <div style="border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;">
+                        <table class="version-control-table" style="width:100%; border-collapse:collapse; table-layout: fixed;">
+                            <thead style="background-color:#f1f5f9; color:var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                                <tr>
+                                    <!-- Aumentei a largura desta coluna para caber o nome + a versão na mesma linha -->
+                                    <th style="padding:14px 12px; width: 35%; text-align: left; font-weight: 600;">Arquivo / Versão</th>
+                                    <th style="padding:14px 12px; width: 15%; text-align: center; font-weight: 600;">Data Commit</th>
+                                    <th style="padding:14px 12px; width: 30%; text-align: left; font-weight: 600;">Status / Detalhes</th>
+                                    <th style="padding:14px 12px; width: 20%; text-align: center; font-weight: 600;">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>${linhasCommits}</tbody>
                         </table>
                     </div>
                 </div>
+
             </div>
         </td>`;
 
@@ -909,9 +1201,6 @@ function executarDescarteBinario(idVersao, event) {
     document.getElementById("deleteModal")?.classList.add("show");
 }
 
-// ------------------------------------------------------------
-// Detalhes de deleção
-// ------------------------------------------------------------
 function exibirDetalhesDelecao(payloadEncoded, event) {
     if (event) {
         event.preventDefault();
@@ -947,29 +1236,6 @@ function exibirDetalhesDelecao(payloadEncoded, event) {
 }
 
 // ------------------------------------------------------------
-// Toasts
-// ------------------------------------------------------------
-function exibirNotificacaoSucesso(mensagem) {
-    const toast = document.getElementById("toastSuccess");
-    const toastMsg = document.getElementById("toastMessage");
-    if (!toast || !toastMsg) return;
-
-    toastMsg.textContent = mensagem;
-    toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 4000);
-}
-
-function exibirNotificacaoErro(mensagem) {
-    const toast = document.getElementById("toastError");
-    const toastMsg = document.getElementById("toastErrorMessage");
-    if (!toast || !toastMsg) return;
-
-    toastMsg.textContent = mensagem;
-    toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 5000);
-}
-
-// ------------------------------------------------------------
 // Select de workspaces no formulário de novo PBIx
 // ------------------------------------------------------------
 async function carregarWorkspacesNoFormSelect() {
@@ -1002,7 +1268,7 @@ async function carregarWorkspacesNoFormSelect() {
 }
 
 // ------------------------------------------------------------
-// Edição inline de cadastro
+// Edição inline de cadastro (Power BI)
 // ------------------------------------------------------------
 async function ativarModoEdicaoDB(idDashboard, event) {
     if (event) event.stopPropagation();
@@ -1028,72 +1294,48 @@ async function ativarModoEdicaoDB(idDashboard, event) {
         (todasWorkspaces || []).forEach(ws => {
             const estaVinculado = ambientesAtuais.includes(ws.nome_comercial) ? "checked" : "";
             opcoesWorkspacesHTML += `
-                <label style="display:flex; align-items:center; gap:8px; font-size:13px;
-                              color:var(--text-main); cursor:pointer;">
-                    <input type="checkbox" name="edit_workspaces_${db.id_dashboard}"
-                           value="${escapeHtml(ws.id_workspace)}" ${estaVinculado}
-                           style="width:16px; height:16px; accent-color:var(--primary);">
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer;">
+                    <input type="checkbox" name="edit_workspaces_${db.id_dashboard}" value="${escapeHtml(ws.id_workspace)}" ${estaVinculado} style="width:16px; height:16px; accent-color:var(--primary);">
                     <span>${escapeHtml(ws.nome_comercial || "")}</span>
                 </label>`;
         });
     } catch (err) {
-        opcoesWorkspacesHTML = "<p style='color:red; font-size:12px;'>Falha ao carregar ambientes relacionais.</p>";
+        opcoesWorkspacesHTML = "<p style='color:red; font-size:12px;'>Falha ao carregar ambientes.</p>";
     }
 
-    const tabelasValue = (db.tabelas_utilizadas_texto === "Nenhuma tabela indexada neste relatório.")
-        ? ""
-        : (db.tabelas_utilizadas_texto || "");
+    const tabelasValue = (db.tabelas_utilizadas_texto === "Nenhuma tabela indexada neste relatório.") ? "" : (db.tabelas_utilizadas_texto || "");
 
     container.innerHTML = `
-        <div style="background:#fff; border:1px solid var(--primary); padding:24px;
-                    border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(2,132,199,0.05); width:100%;">
-            <h4 style="font-size:12px; color:var(--primary); margin-bottom:16px; font-weight:700;
-                       text-transform:uppercase; letter-spacing:.5px;">
+        <div style="background:#fff; border:1px solid var(--primary); padding:24px; border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(2,132,199,0.05); width:100%;">
+            <h4 style="font-size:12px; color:var(--primary); margin-bottom:16px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;">
                 ✏️ Editar Registro Principal de Governança</h4>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:14px;">
                 <div class="form-group">
-                    <label style="font-size:11px; font-weight:600; color:var(--text-muted);
-                                  margin-bottom:6px; display:block;">Nome Comercial do Relatório</label>
-                    <input type="text" id="edit-nome-${db.id_dashboard}" value="${escapeHtml(db.nome_dashboard || "")}"
-                           style="width:100%; padding:10px; border:1px solid var(--border-color);
-                                  border-radius:6px; font-size:13px; color:var(--text-main);">
+                    <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Nome Comercial do Relatório</label>
+                    <input type="text" id="edit-nome-${db.id_dashboard}" value="${escapeHtml(db.nome_dashboard || "")}" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; color:var(--text-main);">
                 </div>
                 <div class="form-group">
-                    <label style="font-size:11px; font-weight:600; color:var(--text-muted);
-                                  margin-bottom:6px; display:block;">Tabelas Consultadas no Banco (Oracle)</label>
-                    <input type="text" id="edit-tabelas-${db.id_dashboard}" value="${escapeHtml(tabelasValue)}"
-                           style="width:100%; padding:10px; border:1px solid var(--border-color);
-                                  border-radius:6px; font-size:13px; color:var(--text-main);">
+                    <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Tabelas Consultadas no Banco (Oracle)</label>
+                    <textarea id="edit-tabelas-${db.id_dashboard}" rows="3" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; color:var(--text-main); resize:vertical;">${escapeHtml(tabelasValue)}</textarea>
                 </div>
             </div>
 
             <div class="form-group" style="margin-bottom:16px;">
-                <label style="font-size:11px; font-weight:600; color:var(--text-muted);
-                              margin-bottom:6px; display:block;">Link de Embed do Frame (URL de Visualização)</label>
-                <input type="url" id="edit-link-${db.id_dashboard}" value="${escapeHtml(db.link_embed || "")}"
-                       style="width:100%; padding:10px; border:1px solid var(--border-color);
-                              border-radius:6px; font-size:13px; font-family:monospace; color:var(--text-main);">
+                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Link de Embed do Frame (URL de Visualização)</label>
+                <input type="url" id="edit-link-${db.id_dashboard}" value="${escapeHtml(db.link_embed || "")}" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; font-family:monospace; color:var(--text-main);">
             </div>
 
             <div class="form-group" style="margin-bottom:20px;">
-                <label style="font-size:11px; font-weight:600; color:var(--text-muted);
-                              margin-bottom:6px; display:block;">
-                    Alocação nos Ambientes / Workspaces (Marque para Vincular)</label>
-                <div style="background:#f8fafc; border:1px solid var(--border-color); padding:14px;
-                            border-radius:6px; display:flex; flex-direction:column; gap:8px;
-                            max-height:120px; overflow-y:auto;">
+                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Alocação nos Ambientes / Workspaces</label>
+                <div style="background:#f8fafc; border:1px solid var(--border-color); padding:14px; border-radius:6px; display:flex; flex-direction:column; gap:8px; max-height:120px; overflow-y:auto;">
                     ${opcoesWorkspacesHTML}
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid var(--border-color);
-                        padding-top:16px;">
-                <button class="btn-modal-cancel" onclick="restaurarTelaAuditoriaAnterior(${db.id_dashboard}, event)"
-                        style="padding:8px 16px; font-size:12px; cursor:pointer;">Cancelar</button>
-                <button class="btn-primary" onclick="salvarAlteracaoRegistroPrincipal(${db.id_dashboard}, event)"
-                        style="padding:8px 20px; font-size:12px; background:var(--primary); cursor:pointer;">
-                    Salvar Alterações</button>
+            <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid var(--border-color); padding-top:16px;">
+                <button class="btn-modal-cancel" onclick="restaurarTelaAuditoriaAnterior(${db.id_dashboard}, event)" style="padding:8px 16px; font-size:12px; cursor:pointer;">Cancelar</button>
+                <button class="btn-primary" onclick="salvarAlteracaoRegistroPrincipal(${db.id_dashboard}, event)" style="padding:8px 20px; font-size:12px; background:var(--primary); cursor:pointer;">Salvar Alterações</button>
             </div>
         </div>`;
 }
@@ -1118,11 +1360,11 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
     const listaWorkspacesIds = Array.from(checkboxes).map(cb => cb.value);
 
     if (!novoNome || !novoLink) {
-        alert("Nome e Link do Frame são obrigatórios.");
+        exibirNotificacaoErro("Nome e Link do Frame são obrigatórios.");
         return;
     }
     if (listaWorkspacesIds.length === 0) {
-        alert("O relatório precisa estar alocado em pelo menos uma workspace.");
+        exibirNotificacaoErro("O relatório precisa estar alocado em pelo menos uma workspace.");
         return;
     }
 
@@ -1147,16 +1389,69 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
                 if (trPai) trPai.click();
             }, 220);
         } else {
-            alert("Erro interno ao salvar alterações cadastrais.");
+            exibirNotificacaoErro("Erro interno ao salvar alterações cadastrais.");
         }
     } catch (error) {
-        alert("Falha de comunicação com o servidor Python.");
+        exibirNotificacaoErro("Falha de comunicação com o servidor Python.");
     }
 }
 
-// ------------------------------------------------------------
-// Atalho: abrir formulário de commit para versão nova
-// ------------------------------------------------------------
+function restaurarTelaAuditoriaAnterior(idDashboard, event) {
+    if (event) event.stopPropagation();
+    const container = document.getElementById(`edit-block-db-${idDashboard}`);
+    if (container && container.dataset.htmlOriginal) {
+        container.innerHTML = container.dataset.htmlOriginal;
+        container.dataset.htmlOriginal = "";
+    }
+}
+
+async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
+    if (event) event.stopPropagation();
+
+    const novoNome = (document.getElementById(`edit-nome-${idDashboard}`)?.value || "").trim();
+    const novoLink = (document.getElementById(`edit-link-${idDashboard}`)?.value || "").trim();
+    const novasTabelas = (document.getElementById(`edit-tabelas-${idDashboard}`)?.value || "").trim();
+
+    const checkboxes = document.querySelectorAll(`input[name="edit_workspaces_${idDashboard}"]:checked`);
+    const listaWorkspacesIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (!novoNome || !novoLink) {
+        exibirNotificacaoErro("Nome e Link do Frame são obrigatórios.");
+        return;
+    }
+    if (listaWorkspacesIds.length === 0) {
+        exibirNotificacaoErro("O relatório precisa estar alocado em pelo menos uma workspace.");
+        return;
+    }
+
+    try {
+        const response = await fetch("/api/dashboards/editar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                id_dashboard: idDashboard,
+                nome: novoNome,
+                link: novoLink,
+                tabelas: novasTabelas,
+                id_workspaces: listaWorkspacesIds
+            })
+        });
+
+        if (response.ok) {
+            exibirNotificacaoSucesso("Ambientes e metadados atualizados com sucesso no SQLite!");
+            await renderizarTabelaDashboards();
+            setTimeout(() => {
+                const trPai = document.getElementById(`tr-db-${idDashboard}`);
+                if (trPai) trPai.click();
+            }, 220);
+        } else {
+            exibirNotificacaoErro("Erro interno ao salvar alterações cadastrais.");
+        }
+    } catch (error) {
+        exibirNotificacaoErro("Falha de comunicação com o servidor Python.");
+    }
+}
+
 function atalhoCommitNovaVersao(idDashboard, event) {
     if (event) event.stopPropagation();
     const db = listaDashboardsCarregados.find(item => item.id_dashboard === idDashboard);
@@ -1167,32 +1462,9 @@ function atalhoCommitNovaVersao(idDashboard, event) {
     if (inputNome && db.nome_dashboard) inputNome.value = db.nome_dashboard;
 }
 
-function formatarDicionarioDados(textoBruto) {
-    if (!textoBruto) return "Nenhuma tabela indexada.";
-    
-    let texto = textoBruto;
-
-    // 1. Coloca um espaço antes de "TABELA:" para não colar na palavra anterior
-    texto = texto.replace(/TABELA:/g, " TABELA:");
-
-    // 2. Quebra a linha antes de "TABELA:" (com um espaço extra para respirar)
-    texto = texto.replace(/ TABELA:/g, "\n\nTABELA:");
-
-    // 3. O padrão do seu print mostra as colunas com hífen. 
-    // Se o texto estiver inline, precisamos quebrar a linha antes de cada coluna.
-    // Isso substitui o traço por "\n   - " (quebra de linha e 3 espaços)
-    texto = texto.replace(/\s-\s/g, "\n   - ");
-
-    // 4. Limpa espaços extras no começo e no fim
-    return texto.trim();
-}
-
 function redirecionarParaItem(tipo, nomeOuId, event) {
     if (event) event.stopPropagation(); 
-
-    // A MÁGICA ACONTECE AQUI: Limpa o texto, removendo o "(Criado: ... | Commit: ...)"
     const nomeLimpo = nomeOuId.replace(/\s*\(.*?\)/g, '').trim();
-
     console.log("🔍 Buscando pelo nome real:", nomeLimpo);
 
     if (tipo === 'pbi') {
@@ -1201,7 +1473,6 @@ function redirecionarParaItem(tipo, nomeOuId, event) {
         let tentativas = 0;
         const abrirDashboard = setInterval(() => {
             tentativas++;
-            
             const linhas = document.querySelectorAll("#tbodyDashboards tr.db-row");
             let encontrou = false;
 
@@ -1212,14 +1483,11 @@ function redirecionarParaItem(tipo, nomeOuId, event) {
                 if (textoLinha.includes(textoBusca)) {
                     clearInterval(abrirDashboard);
                     encontrou = true;
-                    
                     tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
                     tr.style.transition = "background-color 0.3s";
                     tr.style.backgroundColor = "#fef08a"; 
                     setTimeout(() => { tr.style.backgroundColor = ""; }, 1500); 
-
-                    tr.click(); // Abre a auditoria com o Iframe
+                    tr.click(); 
                     break;
                 }
             }
@@ -1271,7 +1539,7 @@ async function carregarWorkspacesNoFormUsuario() {
         workspaces.forEach(ws => {
             const label = document.createElement("label");
             label.className = "workspace-checkbox-item";
-            label.style.margin = "0"; // Sobrescreve margens se houver
+            label.style.margin = "0";
             label.innerHTML = `
                 <input type="checkbox" name="user_workspaces" value="${ws.id_workspace}">
                 <span>${escapeHtml(ws.nome_comercial)}</span>
@@ -1284,96 +1552,19 @@ async function carregarWorkspacesNoFormUsuario() {
     }
 }
 
-async function salvarNovoUsuario(event) {
-    event.preventDefault();
-    
-    const nome = document.getElementById("userNome").value.trim();
-    const ldap = document.getElementById("userLdap").value.trim();
-    const checkboxes = document.querySelectorAll('input[name="user_workspaces"]:checked');
-    const workspacesIds = Array.from(checkboxes).map(cb => cb.value);
-
-    if (!nome || !ldap) {
-        exibirNotificacaoErro("Nome e Usuário (LDAP) são obrigatórios.");
-        return;
-    }
-
-    try {
-        // Supondo que a API aceite esse payload. Ajuste conforme seu backend Python.
-        const response = await fetch('/api/usuarios', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                nome: nome,
-                ldap: ldap,
-                id_workspaces: workspacesIds
-            })
-        });
-
-        if (response.ok) {
-            exibirNotificacaoSucesso("Usuário cadastrado com sucesso!");
-            document.getElementById("formUsuario").reset();
-            document.getElementById("subTabListarUsuario").click(); // Vai para a aba de listagem
-        } else {
-            alert("Erro ao salvar usuário.");
-        }
-    } catch (error) {
-        exibirNotificacaoErro("Falha de comunicação com o servidor.");
-    }
-}
-
-// =========================================================================
-// GESTÃO DE USUÁRIOS (ABAS, LISTAGEM, FILTRO E AUDITORIA)
-// =========================================================================
-
-let listaUsuariosCarregados = [];
-
-// 1. Configura as abas de Listar e Cadastrar
-function configurarSubAbasUsuario() {
-    const btnListar = document.getElementById("subTabListarUser");
-    const btnNovo = document.getElementById("subTabNovoUser");
-    const secListar = document.getElementById("secListarUser");
-    const secNovo = document.getElementById("secNovoUser");
-
-    if (!btnListar || !btnNovo) return;
-
-    btnListar.addEventListener("click", function () {
-        btnListar.classList.add("active");
-        btnNovo.classList.remove("active");
-        secListar.classList.add("active");
-        secNovo.classList.remove("active");
-        renderizarTabelaUsuarios(); // Chama a busca
-    });
-
-    btnNovo.addEventListener("click", function () {
-        btnNovo.classList.add("active");
-        btnListar.classList.remove("active");
-        secNovo.classList.add("active");
-        secListar.classList.remove("active");
-        
-        document.getElementById("formUsuario").reset();
-        carregarWorkspacesNoFormUsuario(); 
-    });
-}
-
-
+// ------------------------------------------------------------
+// Usuários — listagem, filtro e auditoria
+// ------------------------------------------------------------
 async function renderizarTabelaUsuarios() {
-    console.log("1. Iniciando renderização da tabela de usuários...");
     const tbody = document.getElementById("tbodyUsuarios");
-    
-    if (!tbody) {
-        console.error("❌ ERRO FATAL: A tag <tbody id='tbodyUsuarios'> NÃO EXISTE no HTML!");
-        return;
-    }
-    
+    if (!tbody) return;
     tbody.innerHTML = "<tr><td colspan='4' style='padding:16px;'>Buscando usuários...</td></tr>";
 
     try {
         const response = await fetch('/api/usuarios'); 
-        
         if (!response.ok) throw new Error(`O servidor retornou o status ${response.status}`);
         
         listaUsuariosCarregados = await response.json();
-        console.log("2. Dados recebidos do Python:", listaUsuariosCarregados);
 
         const inputFiltro = document.getElementById("filtroBuscaUser");
         if (inputFiltro) inputFiltro.value = "";
@@ -1388,15 +1579,11 @@ async function renderizarTabelaUsuarios() {
     }
 }
 
-// 3. Desenha as linhas na tabela (usado pelo carregamento e pelo filtro)
 function desenharLinhasUsuarios(usuariosParaDesenhar = listaUsuariosCarregados) {
-    console.log("3. Tentando desenhar as linhas na tela. Total:", usuariosParaDesenhar.length);
-    
     const tbody = document.getElementById("tbodyUsuarios");
     tbody.innerHTML = "";
 
     if (!usuariosParaDesenhar || usuariosParaDesenhar.length === 0) {
-        console.warn("⚠️ Nenhum usuário para desenhar (lista vazia).");
         tbody.innerHTML = "<tr><td colspan='4' style='padding:16px; color:var(--text-muted);'>Nenhum usuário encontrado.</td></tr>";
         return;
     }
@@ -1404,6 +1591,7 @@ function desenharLinhasUsuarios(usuariosParaDesenhar = listaUsuariosCarregados) 
     usuariosParaDesenhar.forEach(user => {
         const tr = document.createElement("tr");
         tr.className = "user-row";
+        tr.id = `tr-user-${user.id_usuario}`;
         
         const nomeUser = user.nome || "Sem Nome";
         const ldapUser = user.ldap || "Sem LDAP";
@@ -1421,11 +1609,8 @@ function desenharLinhasUsuarios(usuariosParaDesenhar = listaUsuariosCarregados) 
         tr.addEventListener("click", () => toggleAuditoriaUsuarioInline(user, tr));
         tbody.appendChild(tr);
     });
-    
-    console.log("4. ✅ Tabela desenhada com sucesso!");
 }
 
-// 4. Filtro de Pesquisa
 function filtrarTabelaUsuarios() {
     const input = document.getElementById("filtroBuscaUser");
     if (!input) return;
@@ -1446,7 +1631,6 @@ function filtrarTabelaUsuarios() {
     desenharLinhasUsuarios(usuariosFiltrados);
 }
 
-// 5. Auditoria (Acordeão do usuário)
 function toggleAuditoriaUsuarioInline(user, trUser) {
     const idAuditoria = `tr-audit-user-${user.id_usuario || user.ldap}`;
     const existente = document.getElementById(idAuditoria);
@@ -1493,7 +1677,6 @@ function toggleAuditoriaUsuarioInline(user, trUser) {
         htmlWorkspaces = "<p style='color:var(--text-muted); font-size:14px;'>Este usuário não possui acesso a nenhuma workspace.</p>";
     }
 
-    // Adicionado o botão de editar e a div com ID para ser substituída pelo formulário
     trAudit.innerHTML = `
         <td colspan="4" style="padding:0 !important; background-color:#f8fafc;">
             <div id="edit-block-user-${user.id_usuario}" style="padding: 24px 32px; border-bottom: 2px solid var(--primary-light);">
@@ -1518,7 +1701,6 @@ function toggleAuditoriaUsuarioInline(user, trUser) {
     trUser.insertAdjacentElement("afterend", trAudit);
 }
 
-// 6. Abre o painel de dashboards dentro da workspace do usuário
 function toggleDashboardsDaWorkspace(wsId, event) {
     event.stopPropagation();
     const panel = document.getElementById(`panel-dashs-${wsId}`);
@@ -1529,26 +1711,20 @@ function toggleDashboardsDaWorkspace(wsId, event) {
 
 async function ativarModoEdicaoUsuario(idUsuario, event) {
     if (event) event.stopPropagation();
-
-    // Busca os dados atuais do usuário na memória
     const user = listaUsuariosCarregados.find(u => u.id_usuario === idUsuario);
     if (!user) return;
 
     const container = document.getElementById(`edit-block-user-${idUsuario}`);
     if (!container) return;
 
-    // Salva o HTML original caso o usuário clique em "Cancelar"
     if (!container.dataset.htmlOriginal) {
         container.dataset.htmlOriginal = container.innerHTML;
     }
 
-    // Prepara a lista de checkboxes de workspaces
     let opcoesWorkspacesHTML = "";
     try {
         const resWS = await fetch('/api/workspaces');
         const todasWorkspaces = await resWS.json();
-        
-        // Mapeia as IDs de workspaces que esse usuário já tem
         const idsWssDoUsuario = user.workspaces ? user.workspaces.map(w => w.id_workspace) : [];
 
         todasWorkspaces.forEach(ws => {
@@ -1564,7 +1740,6 @@ async function ativarModoEdicaoUsuario(idUsuario, event) {
         opcoesWorkspacesHTML = "<p style='color:red; font-size:12px;'>Falha ao carregar ambientes.</p>";
     }
 
-    // Substitui o conteúdo pela tela de edição
     container.innerHTML = `
         <div style="background: #ffffff; border: 1px solid var(--primary); padding: 24px; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(2, 132, 199, 0.05); width: 100%;">
             <h4 style="font-size: 12px; color: var(--primary); margin-bottom: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
@@ -1625,7 +1800,7 @@ async function salvarEdicaoUsuario(idUsuario, event) {
     const listaWorkspacesIds = Array.from(checkboxes).map(cb => cb.value);
 
     if (!novoNome) {
-        alert("O Nome é obrigatório.");
+        exibirNotificacaoErro("O Nome é obrigatório.");
         return;
     }
 
@@ -1644,23 +1819,22 @@ async function salvarEdicaoUsuario(idUsuario, event) {
 
         if (response.ok) {
             exibirNotificacaoSucesso("Cadastro do usuário atualizado com sucesso!");
-            
-            // Recarrega a tabela para atualizar os dados
             await renderizarTabelaUsuarios();
-            
-            // Reabre a auditoria do usuário com os dados novos
             setTimeout(() => {
                 const trPai = document.getElementById(`tr-user-${idUsuario}`);
                 if (trPai) trPai.click(); 
             }, 250);
         } else {
-            alert("Erro interno ao salvar alterações cadastrais.");
+            exibirNotificacaoErro("Erro interno ao salvar alterações cadastrais.");
         }
     } catch (error) {
-        alert("Falha de comunicação com o servidor Python.");
+        exibirNotificacaoErro("Falha de comunicação com o servidor Python.");
     }
 }
 
+// ------------------------------------------------------------
+// Edição inline de Workspace
+// ------------------------------------------------------------
 function ativarModoEdicaoWorkspace(idWorkspace, event) {
     if (event) event.stopPropagation();
 
@@ -1739,65 +1913,28 @@ async function salvarEdicaoWorkspace(idWorkspace, event) {
     }
 }
 
-// --- FUNÇÃO DE EXCLUIR COM CONFIRMAÇÃO ---
-
-// Variável para guardar qual workspace está sendo excluída no momento
-let wsIdParaExcluir = null;
-
-function excluirWorkspace(botao, event) {
-    if (event) event.stopPropagation();
-
-    // Pega os dados diretamente do botão
-    const idWorkspace = botao.getAttribute('data-id');
-    const nomeWorkspace = botao.getAttribute('data-nome');
-    
-    wsIdParaExcluir = idWorkspace;
-    
-    // Preenche o modal
-    const elNome = document.getElementById("deleteWsNome");
-    if (elNome) elNome.textContent = nomeWorkspace;
-    
-    // Abre o modal
-    const modal = document.getElementById("deleteWsModal");
-    if (modal) modal.classList.add("show");
+// ------------------------------------------------------------
+// Logout
+// ------------------------------------------------------------
+function realizarLogout() {
+    localStorage.removeItem("usuarioLogado");
+    window.location.href = "/"; 
 }
 
-// =========================================================================
-// OUVINTE GLOBAL (O Segredo para funcionar sempre)
-// Este evento escuta qualquer clique na tela inteira, garantindo que o botão
-// "Sim, Excluir" funcione independente de quando ele foi carregado.
-// =========================================================================
-document.addEventListener("click", async function(event) {
-    // Verifica se o que foi clicado é o botão de confirmar (ou algo dentro dele)
-    const btnConfirm = event.target.closest("#btnConfirmDeleteWs");
+// ------------------------------------------------------------
+// PowerBI
+// ------------------------------------------------------------
+
+// Função que limpa o link, extraindo apenas a URL correta de dentro do texto
+function extrairLinkPuro(linkSujo) {
+    if (!linkSujo) return "";
     
-    if (btnConfirm) {
-        if (!wsIdParaExcluir) return;
-        
-        const textoOriginal = btnConfirm.textContent;
-        btnConfirm.textContent = "Excluindo...";
-        btnConfirm.disabled = true;
-
-        try {
-            const response = await fetch('/api/workspaces/excluir', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id_workspace: wsIdParaExcluir })
-            });
-
-            if (response.ok) {
-                document.getElementById("deleteWsModal").classList.remove("show");
-                exibirNotificacaoSucesso("Workspace excluída com sucesso!");
-                renderizarTabelaWorkspaces(); // Atualiza a tabela
-            } else {
-                exibirNotificacaoErro("Erro ao excluir a workspace no servidor.");
-            }
-        } catch (error) {
-            exibirNotificacaoErro("Falha de comunicação com o servidor.");
-        } finally {
-            btnConfirm.textContent = textoOriginal;
-            btnConfirm.disabled = false;
-            wsIdParaExcluir = null;
-        }
+    // Se o texto tiver uma tag <iframe>, ele procura o que está dentro de src=""
+    const match = linkSujo.match(/src=["'](.*?)["']/);
+    if (match && match[1]) {
+        return match[1];
     }
-});
+    
+    // Se não for uma tag, mas tiver espaços em branco, remove os espaços
+    return linkSujo.trim();
+}
