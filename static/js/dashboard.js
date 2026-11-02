@@ -626,25 +626,20 @@ async function carregarDadosPainel(codigoLdap) {
 
 // NÍVEL 2: Abrir a "Pasta" do Workspace
 async function abrirWorkspaceHome(ws) {
-    // Atualiza o visual da tela
     document.getElementById("homeTitulo").textContent = ws.nome_comercial || ws.nome;
     document.getElementById("homeSubtitulo").textContent = ws.descricao || "Selecione um painel para visualizar.";
     document.getElementById("btnVoltarHome").style.display = "flex";
     document.getElementById("workspacesGrid").style.display = "none";
     
-    // Atualiza o Breadcrumb
-    const breadcrumb = document.getElementById("homeBreadcrumb");
-    breadcrumb.innerHTML = `
+    document.getElementById("homeBreadcrumb").innerHTML = `
         <span style="cursor: pointer; color: var(--primary); font-weight: 600;" onclick="voltarParaRaizHome()">🏠 Meus Workspaces</span>
         <span> / </span>
         <span style="font-weight: 600; color: var(--text-main);">${escapeHtml(ws.nome_comercial || ws.nome)}</span>
     `;
 
-    // Prepara o container dos dashboards
     const containerDashs = document.getElementById("homeDashboardView");
-    containerDashs.style.display = "none"; // Garante que o iframe grande esteja escondido
+    containerDashs.style.display = "none"; 
 
-    // Cria a div onde os mini cards dos dashboards vão ficar
     let gridDashs = document.getElementById("homeDashboardsGrid");
     if (!gridDashs) {
         gridDashs = document.createElement("div");
@@ -656,17 +651,16 @@ async function abrirWorkspaceHome(ws) {
     gridDashs.innerHTML = "<p class='text-muted'>Carregando painéis...</p>";
 
     try {
-        // Busca os dashboards que estão dentro desse workspace
-        // Como o seu backend não tem uma rota específica para isso, vamos buscar todos e filtrar
-        const response = await fetch('/api/dashboards');
-        const todosDashboards = await response.json();
+        // Busca todos os dashboards e filtra localmente pelo nome do Workspace
+        const resDash = await fetch('/api/dashboards');
+        const todosDashboards = await resDash.json();
+
+        gridDashs.innerHTML = "";
         
-        // Filtra os dashboards que pertencem à workspace (usando o nome_workspace como filtro)
+        // Filtra os dashboards daquele workspace
         const dashboardsDoWs = todosDashboards.filter(d => 
             d.nome_workspace && d.nome_workspace.includes(ws.nome_comercial)
         );
-
-        gridDashs.innerHTML = "";
 
         if (dashboardsDoWs.length === 0) {
             gridDashs.innerHTML = "<p class='text-muted' style='grid-column: 1/-1;'>Nenhum dashboard alocado nesta workspace.</p>";
@@ -676,7 +670,6 @@ async function abrirWorkspaceHome(ws) {
         dashboardsDoWs.forEach(db => {
             const miniCard = document.createElement("div");
             miniCard.className = "dashboard-card-mini";
-            
             const linkLimpo = extrairLinkPuro(db.link_embed);
 
             miniCard.innerHTML = `
@@ -686,7 +679,6 @@ async function abrirWorkspaceHome(ws) {
                 <div class="dashboard-mini-title">${escapeHtml(db.nome_dashboard)}</div>
             `;
 
-            // NÍVEL 3: Clicar no mini card abre o frame expandido
             miniCard.onclick = () => abrirDashboardHome(db, ws);
             gridDashs.appendChild(miniCard);
         });
@@ -1244,26 +1236,35 @@ async function carregarWorkspacesNoFormSelect() {
 
     try {
         const response = await fetch("/api/workspaces");
-        if (!response.ok) throw new Error("Falha ao buscar ambientes.");
         const workspaces = await response.json();
-
         containerWS.innerHTML = "";
 
-        if (!workspaces || workspaces.length === 0) {
-            containerWS.innerHTML = "<p style='font-size:13px; color:var(--text-muted);'>Nenhuma workspace cadastrada no banco.</p>";
-            return;
-        }
-
         workspaces.forEach(ws => {
-            const label = document.createElement("label");
-            label.className = "workspace-checkbox-item";
-            label.innerHTML = `
-                <input type="checkbox" name="workspaces_selecionadas" value="${escapeHtml(ws.id_workspace)}">
-                <span>${escapeHtml(ws.nome_comercial || "")}</span>`;
-            containerWS.appendChild(label);
+            const div = document.createElement("div");
+            div.style.cssText = "display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 12px;";
+            div.innerHTML = `
+                <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; cursor:pointer;">
+                    <input type="checkbox" name="workspaces_selecionadas" value="${ws.id_workspace}" class="chk-workspace" onchange="toggleInputLink(this)">
+                    <span>${escapeHtml(ws.nome_comercial)}</span>
+                </label>
+                <!-- Input que começa escondido -->
+                <div id="div-link-ws-${ws.id_workspace}" style="display: none; padding-left: 24px;">
+                    <label style="font-size: 11px; color: var(--text-muted);">Link do Iframe para esta workspace (Opcional)</label>
+                    <input type="url" name="link_workspace_${ws.id_workspace}" placeholder="https://app.powerbi.com/..." style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                </div>
+            `;
+            containerWS.appendChild(div);
         });
     } catch (error) {
         console.error("Erro ao carregar lista de checkboxes:", error);
+    }
+}
+
+// Função para mostrar o campo de link quando o checkbox for marcado
+function toggleInputLink(checkbox) {
+    const divLink = document.getElementById(`div-link-ws-${checkbox.value}`);
+    if (divLink) {
+        divLink.style.display = checkbox.checked ? "block" : "none";
     }
 }
 
@@ -1293,22 +1294,34 @@ async function ativarModoEdicaoDB(idDashboard, event) {
 
         (todasWorkspaces || []).forEach(ws => {
             const estaVinculado = ambientesAtuais.includes(ws.nome_comercial) ? "checked" : "";
+            
+            // NOVO: Campo para colar o link específico de cada workspace
             opcoesWorkspacesHTML += `
-                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer;">
-                    <input type="checkbox" name="edit_workspaces_${db.id_dashboard}" value="${escapeHtml(ws.id_workspace)}" ${estaVinculado} style="width:16px; height:16px; accent-color:var(--primary);">
-                    <span>${escapeHtml(ws.nome_comercial || "")}</span>
-                </label>`;
+                <div style="display: flex; flex-direction: column; gap: 4px; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer; font-weight: 600;">
+                        <input type="checkbox" name="edit_workspaces_${db.id_dashboard}" value="${escapeHtml(ws.id_workspace)}" ${estaVinculado} style="width:16px; height:16px; accent-color:var(--primary);">
+                        <span>${escapeHtml(ws.nome_comercial || "")}</span>
+                    </label>
+                    <input type="url" name="edit_link_ws_${ws.id_workspace}" 
+                           placeholder="Link do Iframe específico para esta Workspace (Opcional)" 
+                           value="" 
+                           style="width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; margin-top: 4px;">
+                </div>`;
         });
     } catch (err) {
         opcoesWorkspacesHTML = "<p style='color:red; font-size:12px;'>Falha ao carregar ambientes.</p>";
     }
 
-    const tabelasValue = (db.tabelas_utilizadas_texto === "Nenhuma tabela indexada neste relatório.") ? "" : (db.tabelas_utilizadas_texto || "");
+    const tabelasValue = (db.tabelas_utilizadas_texto === "Nenhuma tabela indexada neste relatório.")
+        ? ""
+        : (db.tabelas_utilizadas_texto || "");
 
     container.innerHTML = `
-        <div style="background:#fff; border:1px solid var(--primary); padding:24px; border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(2,132,199,0.05); width:100%;">
-            <h4 style="font-size:12px; color:var(--primary); margin-bottom:16px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;">
-                ✏️ Editar Registro Principal de Governança</h4>
+        <div style="background:#fff; border:1px solid var(--primary); padding:24px;
+                    border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(2,132,199,0.05); width:100%;">
+            <h4 style="font-size:12px; color:var(--primary); margin-bottom:16px; font-weight:700;
+                       text-transform:uppercase; letter-spacing:.5px;">
+                ✏️ Editar Registro e Links de Workspaces</h4>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:14px;">
                 <div class="form-group">
@@ -1316,19 +1329,20 @@ async function ativarModoEdicaoDB(idDashboard, event) {
                     <input type="text" id="edit-nome-${db.id_dashboard}" value="${escapeHtml(db.nome_dashboard || "")}" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; color:var(--text-main);">
                 </div>
                 <div class="form-group">
-                    <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Tabelas Consultadas no Banco (Oracle)</label>
-                    <textarea id="edit-tabelas-${db.id_dashboard}" rows="3" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; color:var(--text-main); resize:vertical;">${escapeHtml(tabelasValue)}</textarea>
+                    <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Link de Embed Padrão (Global)</label>
+                    <input type="url" id="edit-link-${db.id_dashboard}" value="${escapeHtml(db.link_embed || "")}" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; font-family:monospace; color:var(--text-main);">
                 </div>
             </div>
 
             <div class="form-group" style="margin-bottom:16px;">
-                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Link de Embed do Frame (URL de Visualização)</label>
-                <input type="url" id="edit-link-${db.id_dashboard}" value="${escapeHtml(db.link_embed || "")}" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; font-family:monospace; color:var(--text-main);">
+                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Tabelas Consultadas no Banco (Oracle)</label>
+                <textarea id="edit-tabelas-${db.id_dashboard}" rows="2" style="width:100%; padding:10px; border:1px solid var(--border-color); border-radius:6px; font-size:13px; color:var(--text-main);">${escapeHtml(tabelasValue)}</textarea>
             </div>
 
             <div class="form-group" style="margin-bottom:20px;">
-                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">Alocação nos Ambientes / Workspaces</label>
-                <div style="background:#f8fafc; border:1px solid var(--border-color); padding:14px; border-radius:6px; display:flex; flex-direction:column; gap:8px; max-height:120px; overflow-y:auto;">
+                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">
+                    Alocação nos Ambientes (Marque e cole os links exclusivos)</label>
+                <div style="background:#f8fafc; border:1px solid var(--border-color); padding:14px; border-radius:6px; display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto;">
                     ${opcoesWorkspacesHTML}
                 </div>
             </div>
@@ -1358,13 +1372,18 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
 
     const checkboxes = document.querySelectorAll(`input[name="edit_workspaces_${idDashboard}"]:checked`);
     const listaWorkspacesIds = Array.from(checkboxes).map(cb => cb.value);
+    
+    // NOVO: Captura os links específicos de cada workspace
+    let linksPorWorkspace = {};
+    listaWorkspacesIds.forEach(wsId => {
+        const inputLink = document.querySelector(`input[name="edit_link_ws_${wsId}"]`);
+        if (inputLink && inputLink.value.trim() !== "") {
+            linksPorWorkspace[wsId] = inputLink.value.trim();
+        }
+    });
 
     if (!novoNome || !novoLink) {
-        exibirNotificacaoErro("Nome e Link do Frame são obrigatórios.");
-        return;
-    }
-    if (listaWorkspacesIds.length === 0) {
-        exibirNotificacaoErro("O relatório precisa estar alocado em pelo menos uma workspace.");
+        exibirNotificacaoErro("Nome e Link Padrão são obrigatórios.");
         return;
     }
 
@@ -1377,7 +1396,8 @@ async function salvarAlteracaoRegistroPrincipal(idDashboard, event) {
                 nome: novoNome,
                 link: novoLink,
                 tabelas: novasTabelas,
-                id_workspaces: listaWorkspacesIds
+                id_workspaces: listaWorkspacesIds,
+                links_workspaces: linksPorWorkspace // Envia o dicionário de links
             })
         });
 

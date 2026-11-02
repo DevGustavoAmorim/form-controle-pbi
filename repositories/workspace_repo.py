@@ -30,11 +30,11 @@ def listar_todos_workspaces():
     return [dict(row) for row in rows]
 
 def buscar_dashboards_por_workspace(id_workspace):
-    """Busca os dashboards vinculados a esta workspace específica trazidos em ordem alfabética."""
     conn = get_db_connection()
     cursor = conn.cursor()
+    # Busca os dados básicos (mantendo o comportamento antigo para não quebrar a tela de Workspace)
     query = """
-        SELECT d.nome_dashboard, d.data_criacao, d.ultimo_commit 
+        SELECT d.nome_dashboard, d.data_criacao, d.ultimo_commit, d.link_embed
         FROM Dashboard d
         INNER JOIN Workspace_Dashboard wd ON d.id_dashboard = wd.id_dashboard
         WHERE wd.id_workspace = ?
@@ -43,7 +43,16 @@ def buscar_dashboards_por_workspace(id_workspace):
     cursor.execute(query, (id_workspace,))
     rows = cursor.fetchall()
     conn.close()
-    return [f"{row['nome_dashboard']} (Criado: {row['data_criacao'][:10]} | Commit: {row['ultimo_commit'][:10]})" for row in rows]
+    
+    dashboards = []
+    for row in rows:
+        dashboards.append({
+            "nome_dashboard": row['nome_dashboard'],
+            "data_criacao": row['data_criacao'],
+            "ultimo_commit": row['ultimo_commit'],
+            "link_embed": row['link_embed']
+        })
+    return dashboards
 
 def buscar_usuarios_por_workspace(id_workspace):
     """Busca os colaboradores vinculados a esta workspace trazendo em ordem alfabética."""

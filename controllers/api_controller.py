@@ -237,7 +237,8 @@ def upload_pbix_inteligente():
 
         # 4. Associa o dashboard em massa aos ambientes de workspaces selecionados
         for ws_id in lista_workspaces_ids:
-            dashboard_repo.vincular_dashboard_workspace(ws_id, id_dashboard)
+            link_especifico = request.form.get(f'link_workspace_{ws_id}', link_embed)
+            dashboard_repo.vincular_dashboard_workspace(ws_id, id_dashboard, link_especifico)
 
         # CORREÇÃO CIRÚRGICA: Alterada a chave de retorno para ler json_tabelas_e_colunas sem estourar NameError
         return jsonify({

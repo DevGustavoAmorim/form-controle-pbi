@@ -88,11 +88,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Workspace_Dashboard (
             id_workspace INTEGER,
             id_dashboard INTEGER,
+            link_embed TEXT, -- NOVA COLUNA: Guarda o link exclusivo desse workspace
             PRIMARY KEY (id_workspace, id_dashboard),
             FOREIGN KEY (id_workspace) REFERENCES Workspace(id_workspace),
             FOREIGN KEY (id_dashboard) REFERENCES Dashboard(id_dashboard)
         )
     ''')
+    
 
     # 6. Versionamento dos Dashboards (Garante as colunas de Soft-Delete de auditoria)
     cursor.execute('''
