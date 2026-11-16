@@ -1,6 +1,7 @@
 import sqlite3
+from pathlib import Path
 
-DB_NAME = "gestapbi.db"
+DB_NAME = Path(__file__).resolve().parent.parent / "gestapbi.db"
 
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME)
@@ -29,14 +30,20 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
-    # INSERE O ADMIN PADRÃO (LOGIN: admin / SENHA: admin)
+    # INSERE O ADMIN PADRÃO (LOGIN: admin / SENHA: 123456)
     cursor.execute("SELECT COUNT(*) as qtd FROM Usuarios WHERE codigo_ldap = 'admin'")
     if cursor.fetchone()['qtd'] == 0:
         cursor.execute('''
             INSERT INTO Usuarios (codigo_ldap, nome, email, senha, papel, data_criacao) 
-            VALUES ('admin', 'Administrador do Sistema', 'admin@empresa.com', 'admin', 127, datetime('now', 'localtime'))
+            VALUES ('admin', 'Administrador do Sistema', 'admin@empresa.com', '123456', 127, datetime('now', 'localtime'))
         ''')
-        print("[Banco de Dados] Usuário ADMIN padrão criado com sucesso (admin/admin).")
+        print("[Banco de Dados] Usuário ADMIN padrão criado com sucesso.")
+    else:
+        cursor.execute("""
+            UPDATE Usuarios
+            SET senha = '123456'
+            WHERE codigo_ldap = 'admin' AND senha = 'admin'
+        """)
 
     # 2. Tabela de Workspaces
     cursor.execute('''
@@ -84,7 +91,7 @@ def init_db():
             FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
         )
     ''')
-    
+
     # 5. Relacionamento: Workspace x PowerBI
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Workspace_Dashboard (
@@ -94,6 +101,19 @@ def init_db():
             PRIMARY KEY (id_workspace, id_dashboard),
             FOREIGN KEY (id_workspace) REFERENCES Workspace(id_workspace),
             FOREIGN KEY (id_dashboard) REFERENCES Dashboard(id_dashboard)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Workspace_Dashboard_Restricoes (
+            id_workspace INTEGER NOT NULL,
+            id_usuario INTEGER NOT NULL,
+            id_dashboard INTEGER NOT NULL,
+            PRIMARY KEY (id_workspace, id_usuario, id_dashboard),
+            FOREIGN KEY (id_workspace, id_usuario)
+                REFERENCES Workspace_Usuarios(id_workspace, id_usuario),
+            FOREIGN KEY (id_workspace, id_dashboard)
+                REFERENCES Workspace_Dashboard(id_workspace, id_dashboard)
         )
     ''')
 

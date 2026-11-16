@@ -215,6 +215,27 @@
     </div>
 </div>
 
+<div class="custom-modal-overlay" id="deleteUserModal">
+    <div class="custom-modal-box">
+        <div class="modal-header-danger">
+            <h3>Excluir usuário</h3>
+            <button class="btn-close-modal" id="btnCloseDeleteUser">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:14px; color:var(--text-main);">
+                Tem certeza que deseja excluir o usuário <strong id="deleteUserNome"></strong>?
+            </p>
+            <p style="font-size:13px; color:#b91c1c; margin-top:12px;">
+                Os vínculos deste usuário com as workspaces também serão removidos. Esta ação não pode ser desfeita.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-modal-cancel" id="btnCancelDeleteUser">Cancelar</button>
+            <button class="btn-modal-confirm" id="btnConfirmDeleteUser">Sim, excluir usuário</button>
+        </div>
+    </div>
+</div>
+
     <!-- SEÇÃO 2: FORMULÁRIO DE CADASTRO -->
     <div id="secNovoUser" class="sub-tab-content">
         <div class="form-container">
@@ -245,7 +266,10 @@
 
                 <!-- NOVO: Grade de Checkboxes de Workspaces -->
                 <div class="form-group">
-                    <label>Vincular Workspaces (Selecione os ambientes permitidos)</label>
+                    <label>Permissões de acesso</label>
+                    <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px;">
+                        Ao liberar uma workspace, todos os relatórios ficam acessíveis por padrão. Desmarque relatórios específicos para bloqueá-los.
+                    </p>
                     <div id="userWorkspaceGrid" class="grid-checkboxes">
                         <!-- O JavaScript vai preencher com os checkboxes -->
                     </div>
@@ -394,6 +418,27 @@
             <div class="modal-footer">
                 <button class="btn-modal-cancel" id="btnCancelModal">Cancelar</button>
                 <button class="btn-modal-confirm" id="btnConfirmModal">Confirmar Exclusão Física</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-modal-overlay" id="deleteDashboardModal">
+        <div class="custom-modal-box">
+            <div class="modal-header-danger">
+                <h3>Excluir Power BI</h3>
+                <button class="btn-close-modal" id="btnCloseDeleteDashboard">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:14px; color:var(--text-main);">
+                    Tem certeza que deseja excluir o Power BI <strong id="deleteDashboardNome"></strong>?
+                </p>
+                <p style="font-size:13px; color:#b91c1c; margin-top:12px;">
+                    Esta ação também removerá os vínculos com workspaces e todo o histórico de versões e arquivos .pbix. Não pode ser desfeita.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal-cancel" id="btnCancelDeleteDashboard">Cancelar</button>
+                <button class="btn-modal-confirm" id="btnConfirmDeleteDashboard">Sim, excluir Power BI</button>
             </div>
         </div>
     </div>

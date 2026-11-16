@@ -102,6 +102,27 @@ def deletar_binario_versao(id_versao, usuario_ldap, motivo, detalhes):
     conn.close()
     return True
 
+def excluir_dashboard(id_dashboard):
+    """Remove o painel, seus vínculos com workspaces e todo o histórico de versões."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id_dashboard FROM Dashboard WHERE id_dashboard = ?", (id_dashboard,))
+        if cursor.fetchone() is None:
+            return False
+
+        cursor.execute("DELETE FROM Workspace_Dashboard_Restricoes WHERE id_dashboard = ?", (id_dashboard,))
+        cursor.execute("DELETE FROM Workspace_Dashboard WHERE id_dashboard = ?", (id_dashboard,))
+        cursor.execute("DELETE FROM Dashboards_versao WHERE id_dashboard = ?", (id_dashboard,))
+        cursor.execute("DELETE FROM Dashboard WHERE id_dashboard = ?", (id_dashboard,))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 def verificar_e_gerar_sequencia_versao_sem_alterar_link(nome_dashboard, link_embed_novo):
     """
     Busca se o painel existe pelo nome. 
@@ -199,12 +220,22 @@ def reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids, links_wo
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        cursor.execute("""
+            SELECT id_workspace, id_usuario
+            FROM Workspace_Dashboard_Restricoes
+            WHERE id_dashboard = ?
+        """, (id_dashboard,))
+        restricoes_existentes = cursor.fetchall()
+        cursor.execute("DELETE FROM Workspace_Dashboard_Restricoes WHERE id_dashboard = ?", (id_dashboard,))
+
         # 1. Limpa os vínculos antigos
         cursor.execute("DELETE FROM Workspace_Dashboard WHERE id_dashboard = ?", (id_dashboard,))
         
         # 2. Insere os novos
         if links_workspaces is None:
             links_workspaces = {}
+
+        workspaces_selecionadas = {str(ws_id) for ws_id in lista_workspaces_ids}
             
         for ws_id in lista_workspaces_ids:
             # Pega o link individual (se existir). Se não, fica None (NULL no banco).
@@ -214,6 +245,13 @@ def reconstruir_vinculos_workspaces(id_dashboard, lista_workspaces_ids, links_wo
                 INSERT INTO Workspace_Dashboard (id_workspace, id_dashboard, link_embed) 
                 VALUES (?, ?, ?)
             """, (ws_id, id_dashboard, link_individual))
+
+        for restricao in restricoes_existentes:
+            if str(restricao['id_workspace']) in workspaces_selecionadas:
+                cursor.execute("""
+                    INSERT INTO Workspace_Dashboard_Restricoes (id_workspace, id_usuario, id_dashboard)
+                    VALUES (?, ?, ?)
+                """, (restricao['id_workspace'], restricao['id_usuario'], id_dashboard))
             
         conn.commit()
     except Exception as e:

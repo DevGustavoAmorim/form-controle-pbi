@@ -6,6 +6,7 @@ import zipfile
 import json
 import re
 import tempfile
+import repositories.usuario_repo as usuario_repo
 
 from collections import defaultdict
 from pbixray import PBIXRay
@@ -30,10 +31,16 @@ def get_workspaces_por_usuario(codigo_ldap):
 
         # 2. Busca as workspaces desse usuário usando a função que já existe
         workspaces = workspace_repo.listar_workspaces_por_usuario(user['id_usuario'])
+        dashboards_bloqueados = usuario_repo.listar_restricoes_dashboards(user['id_usuario'])
         
         # 3. Para cada workspace, busca os dashboards e usuários
         for ws in workspaces:
-            ws['dashs'] = workspace_repo.buscar_dashboards_por_workspace(ws['id_workspace'])
+            dashboards = workspace_repo.buscar_dashboards_por_workspace(ws['id_workspace'])
+            ids_bloqueados = dashboards_bloqueados.get(ws['id_workspace'], set())
+            ws['dashs'] = [
+                dashboard for dashboard in dashboards
+                if dashboard['id_dashboard'] not in ids_bloqueados
+            ]
             ws['users'] = workspace_repo.buscar_usuarios_por_workspace(ws['id_workspace'])
 
         conn.close()
@@ -290,6 +297,22 @@ def excluir_binario_pbi():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@api_blueprint.route('/api/dashboards/excluir', methods=['POST'])
+def excluir_dashboard_pbi():
+    try:
+        dados = request.get_json()
+        id_dashboard = dados.get('id_dashboard') if dados else None
+
+        if not isinstance(id_dashboard, int) or isinstance(id_dashboard, bool) or id_dashboard <= 0:
+            return jsonify({"error": "ID do Power BI inválido."}), 400
+
+        if not dashboard_repo.excluir_dashboard(id_dashboard):
+            return jsonify({"error": "Power BI não encontrado."}), 404
+
+        return jsonify({"success": True, "message": "Power BI e histórico excluídos com sucesso."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 ###############################################
 ###############################################
 from database.database import get_db_connection
@@ -347,8 +370,6 @@ def download_binario_pbi(id_versao):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-import repositories.usuario_repo as usuario_repo
-
 @api_blueprint.route('/api/usuarios', methods=['GET'])
 def listar_usuarios():
     """Retorna a lista real de usuários do banco com suas workspaces e dashboards."""
@@ -357,6 +378,36 @@ def listar_usuarios():
         return jsonify(usuarios), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+def _normalizar_acessos_usuario(workspaces_ids, dashboards_bloqueados):
+    if not isinstance(workspaces_ids, list) or not isinstance(dashboards_bloqueados, dict):
+        raise ValueError("A seleção de workspaces ou relatórios é inválida.")
+
+    def converter_id(valor):
+        if isinstance(valor, bool):
+            raise ValueError("Um dos IDs de acesso é inválido.")
+        try:
+            id_normalizado = int(valor)
+        except (TypeError, ValueError):
+            raise ValueError("Um dos IDs de acesso é inválido.")
+        if id_normalizado <= 0:
+            raise ValueError("Um dos IDs de acesso é inválido.")
+        return id_normalizado
+
+    ids_workspaces = list(dict.fromkeys(converter_id(id_ws) for id_ws in workspaces_ids))
+    ids_workspaces_permitidos = set(ids_workspaces)
+    restricoes_normalizadas = {}
+    for id_workspace, ids_dashboards in dashboards_bloqueados.items():
+        id_workspace_normalizado = converter_id(id_workspace)
+        if id_workspace_normalizado not in ids_workspaces_permitidos:
+            raise ValueError("As restrições devem pertencer às workspaces liberadas para o usuário.")
+        if not isinstance(ids_dashboards, list):
+            raise ValueError("A seleção de relatórios é inválida.")
+        restricoes_normalizadas[str(id_workspace_normalizado)] = list(
+            dict.fromkeys(converter_id(id_dashboard) for id_dashboard in ids_dashboards)
+        )
+
+    return ids_workspaces, restricoes_normalizadas
 
 
 @api_blueprint.route('/api/usuarios', methods=['POST'])
@@ -369,17 +420,25 @@ def criar_usuario():
         email = dados.get('email')
         papel = dados.get('papel', 1)
         workspaces_ids = dados.get('id_workspaces', [])
+        dashboards_bloqueados = dados.get('dashboards_bloqueados', {})
 
         if not nome or not ldap:
             return jsonify({"error": "Nome e LDAP são obrigatórios."}), 400
+        workspaces_ids, dashboards_bloqueados = _normalizar_acessos_usuario(
+            workspaces_ids, dashboards_bloqueados
+        )
 
-        sucesso, resultado = usuario_repo.cadastrar_usuario(nome, ldap, email, papel, workspaces_ids)
+        sucesso, resultado = usuario_repo.cadastrar_usuario(
+            nome, ldap, email, papel, workspaces_ids, dashboards_bloqueados
+        )
         
         if sucesso:
             return jsonify({"success": True, "id_usuario": resultado}), 201
         else:
             return jsonify({"error": resultado}), 500
 
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -394,17 +453,44 @@ def editar_usuario():
         email = dados.get('email')
         papel = dados.get('papel', 1)
         workspaces_ids = dados.get('id_workspaces', [])
+        dashboards_bloqueados = dados.get('dashboards_bloqueados', {})
 
         if not id_usuario or not nome:
             return jsonify({"error": "ID e Nome são obrigatórios."}), 400
+        workspaces_ids, dashboards_bloqueados = _normalizar_acessos_usuario(
+            workspaces_ids, dashboards_bloqueados
+        )
 
-        sucesso = usuario_repo.atualizar_usuario(id_usuario, nome, email, papel, workspaces_ids)
+        sucesso = usuario_repo.atualizar_usuario(
+            id_usuario, nome, email, papel, workspaces_ids, dashboards_bloqueados
+        )
         
         if sucesso:
             return jsonify({"success": True}), 200
         else:
             return jsonify({"error": "Falha ao atualizar no banco."}), 500
 
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_blueprint.route('/api/usuarios/excluir', methods=['POST'])
+def excluir_usuario():
+    try:
+        dados = request.get_json()
+        id_usuario = dados.get('id_usuario') if dados else None
+
+        if not isinstance(id_usuario, int) or isinstance(id_usuario, bool) or id_usuario <= 0:
+            return jsonify({"error": "ID do usuário inválido."}), 400
+
+        resultado = usuario_repo.excluir_usuario(id_usuario)
+        if resultado is None:
+            return jsonify({"error": "Usuário não encontrado."}), 404
+        if resultado is False:
+            return jsonify({"error": "O usuário padrão admin não pode ser excluído."}), 403
+
+        return jsonify({"success": True, "message": "Usuário excluído com sucesso."}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -448,10 +534,12 @@ def login():
         dados = request.get_json()
         usuario = dados.get('username') 
         senha = dados.get('password')
-        tipo = dados.get('tipo', 'admin') # Pega o tipo (ldap ou admin)
+        tipo = dados.get('tipo', 'ldap')
 
         if not usuario or not senha:
             return jsonify({"error": "Usuário e senha são obrigatórios."}), 400
+        if tipo not in ("ldap", "admin"):
+            return jsonify({"error": "Tipo de acesso inválido."}), 400
 
         # =====================================================================
         # AQUI ENTRA A INTEGRAÇÃO REAL COM O LDAP NO FUTURO
@@ -483,7 +571,7 @@ def login():
         if user_autenticado:
             return jsonify({"success": True, "usuario": user_autenticado}), 200
         else:
-            return jsonify({"error": "Usuário não cadastrado no portal."}), 401
+            return jsonify({"error": "Usuário ou senha inválidos para este tipo de acesso."}), 401
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

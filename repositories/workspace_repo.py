@@ -34,7 +34,7 @@ def buscar_dashboards_por_workspace(id_workspace):
     cursor = conn.cursor()
     # Busca os dados básicos (mantendo o comportamento antigo para não quebrar a tela de Workspace)
     query = """
-        SELECT d.nome_dashboard, d.data_criacao, d.ultimo_commit, d.link_embed
+        SELECT d.id_dashboard, d.nome_dashboard, d.data_criacao, d.ultimo_commit, d.link_embed
         FROM Dashboard d
         INNER JOIN Workspace_Dashboard wd ON d.id_dashboard = wd.id_dashboard
         WHERE wd.id_workspace = ?
@@ -47,6 +47,7 @@ def buscar_dashboards_por_workspace(id_workspace):
     dashboards = []
     for row in rows:
         dashboards.append({
+            "id_dashboard": row['id_dashboard'],
             "nome_dashboard": row['nome_dashboard'],
             "data_criacao": row['data_criacao'],
             "ultimo_commit": row['ultimo_commit'],
@@ -113,6 +114,7 @@ def excluir_workspace(id_workspace):
     cursor = conn.cursor()
     try:
         # 1. Remove os vínculos para não quebrar as chaves estrangeiras
+        cursor.execute("DELETE FROM Workspace_Dashboard_Restricoes WHERE id_workspace = ?", (id_workspace,))
         cursor.execute("DELETE FROM Workspace_Usuarios WHERE id_workspace = ?", (id_workspace,))
         cursor.execute("DELETE FROM Workspace_Dashboard WHERE id_workspace = ?", (id_workspace,))
         

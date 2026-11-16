@@ -8,6 +8,8 @@ let iconeBase64Carregado = null;
 let wsIdParaExcluir = null;
 let idVersaoSelecionadaParaDeletar = null;
 let elementoTrLinhaCommitAtiva = null;
+let idDashboardSelecionadoParaExcluir = null;
+let idUsuarioSelecionadoParaExcluir = null;
 
 // ------------------------------------------------------------
 // Helpers
@@ -70,6 +72,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     const usuarioLogado = JSON.parse(userStorage);
     aplicarPermissoes(usuarioLogado); 
+    configurarExclusaoDashboard();
+    configurarExclusaoUsuario();
 
     // 2. Sidebar
     const btnCloseSidebar = document.getElementById("btnCloseSidebar");
@@ -403,6 +407,7 @@ function configurarFormularios() {
             
             const checkboxes = document.querySelectorAll('input[name="user_workspaces"]:checked');
             const workspacesIds = Array.from(checkboxes).map(cb => cb.value);
+            const dashboardsBloqueados = coletarDashboardsBloqueados("user", workspacesIds);
 
             if (!nome || !ldap) {
                 exibirNotificacaoErro("Nome e LDAP são obrigatórios.");
@@ -418,7 +423,8 @@ function configurarFormularios() {
                         ldap: ldap,
                         email: email,
                         papel: parseInt(papel),
-                        id_workspaces: workspacesIds
+                        id_workspaces: workspacesIds,
+                        dashboards_bloqueados: dashboardsBloqueados
                     })
                 });
 
@@ -784,9 +790,10 @@ async function abrirWorkspaceHome(ws) {
 
             if (!nomeLimpo) return;
 
-            const db = todosDashboards.find(
-                (dashboard) =>
-                    normalizarNome(dashboard.nome_dashboard) === nomeLimpo
+            const db = todosDashboards.find(dashboard =>
+                item?.id_dashboard
+                    ? String(dashboard.id_dashboard) === String(item.id_dashboard)
+                    : normalizarNome(dashboard.nome_dashboard) === nomeLimpo
             );
 
             if (!db) {
@@ -1010,8 +1017,11 @@ function toggleAuditoriaInline(ws, trWS, tbody) {
     // AQUI: Mapeia os dashboards para buscar o link exclusivo de cada um
     const liDashboards = dashs.length > 0
         ? dashs.map(d => {
+            const nomeDashboard = typeof d === "string"
+                ? d
+                : d?.nome_dashboard || d?.nome || "";
             // Tenta achar o dashboard na memória global para pegar os links
-            const dbEncontrado = listaDashboardsCarregados.find(item => d.includes(item.nome_dashboard));
+            const dbEncontrado = listaDashboardsCarregados.find(item => nomeDashboard.includes(item.nome_dashboard));
             
             // Se achou, verifica se tem link exclusivo para este workspace
             let linkExclusivo = "";
@@ -1021,13 +1031,15 @@ function toggleAuditoriaInline(ws, trWS, tbody) {
                 } else {
                     linkExclusivo = dbEncontrado.link_embed || "";
                 }
+            } else if (typeof d === "object") {
+                linkExclusivo = d.link_embed || "";
             }
 
             // Passa o linkExclusivo como 3º parâmetro no redirecionarParaItem
             return `
             <li>
-                <span style="font-weight: 500;">${escapeHtml(d)}</span>
-                <button onclick="event.stopPropagation(); redirecionarParaItem('pbi', '${escapeHtml(d).replace(/'/g, "\\'")}', '${escapeHtml(linkExclusivo).replace(/'/g, "\\'")}', event)" 
+                <span style="font-weight: 500;">${escapeHtml(nomeDashboard)}</span>
+                <button onclick="event.stopPropagation(); redirecionarParaItem('pbi', '${escapeHtml(nomeDashboard).replace(/'/g, "\\'")}', '${escapeHtml(linkExclusivo).replace(/'/g, "\\'")}', event)"
                         title="Ir direto para este Dashboard" 
                         style="background: #e0f2fe; border: 1px solid #bae6fd; color: #0284c7; cursor:pointer; font-size: 14px; padding: 2px 10px; border-radius: 4px; font-weight: bold; flex-shrink: 0;">
                     ➔
@@ -1195,12 +1207,70 @@ async function renderizarTabelaDashboards() {
                         padding:6px 12px; border-radius:6px; font-weight:500; cursor:pointer;">Auditar</button>
                 </td>`;
 
+            const acoes = trDB.querySelector("td:last-child");
+            const btnExcluir = document.createElement("button");
+            btnExcluir.type = "button";
+            btnExcluir.className = "btn-action-delete-version";
+            btnExcluir.textContent = "Excluir Power BI";
+            btnExcluir.style.marginLeft = "8px";
+            btnExcluir.addEventListener("click", event => {
+                event.stopPropagation();
+                abrirModalExclusaoDashboard(db);
+            });
+            acoes.appendChild(btnExcluir);
+
             trDB.addEventListener("click", () => toggleAuditoriaBIInline(db, trDB, tbody));
             tbody.appendChild(trDB);
         });
     } catch (error) {
         console.error("Erro ao renderizar dashboards:", error);
         tbody.innerHTML = "<tr><td colspan='4' style='color:red; padding:16px;'>Erro ao carregar dados do Hub ALM.</td></tr>";
+    }
+}
+
+function configurarExclusaoDashboard() {
+    const modal = document.getElementById("deleteDashboardModal");
+    if (!modal) return;
+
+    document.getElementById("btnCloseDeleteDashboard")?.addEventListener("click", fecharModalExclusaoDashboard);
+    document.getElementById("btnCancelDeleteDashboard")?.addEventListener("click", fecharModalExclusaoDashboard);
+    document.getElementById("btnConfirmDeleteDashboard")?.addEventListener("click", confirmarExclusaoDashboard);
+}
+
+function abrirModalExclusaoDashboard(db) {
+    idDashboardSelecionadoParaExcluir = db.id_dashboard;
+    document.getElementById("deleteDashboardNome").textContent = db.nome_dashboard || "";
+    document.getElementById("deleteDashboardModal")?.classList.add("show");
+}
+
+function fecharModalExclusaoDashboard() {
+    document.getElementById("deleteDashboardModal")?.classList.remove("show");
+    idDashboardSelecionadoParaExcluir = null;
+}
+
+async function confirmarExclusaoDashboard() {
+    if (!idDashboardSelecionadoParaExcluir) return;
+
+    const idDashboard = idDashboardSelecionadoParaExcluir;
+    const botaoConfirmar = document.getElementById("btnConfirmDeleteDashboard");
+    if (botaoConfirmar) botaoConfirmar.disabled = true;
+
+    try {
+        const response = await fetch("/api/dashboards/excluir", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id_dashboard: idDashboard })
+        });
+        const resultado = await response.json();
+        if (!response.ok) throw new Error(resultado.error || "Erro ao excluir o Power BI.");
+
+        fecharModalExclusaoDashboard();
+        exibirNotificacaoSucesso("Power BI, vínculos e histórico excluídos com sucesso.");
+        await renderizarTabelaDashboards();
+    } catch (error) {
+        exibirNotificacaoErro(error.message || "Falha de comunicação com o servidor.");
+    } finally {
+        if (botaoConfirmar) botaoConfirmar.disabled = false;
     }
 }
 
@@ -1766,23 +1836,81 @@ async function carregarWorkspacesNoFormUsuario() {
 
     try {
         const response = await fetch('/api/workspaces');
+        if (!response.ok) throw new Error(`O servidor retornou o status ${response.status}`);
         const workspaces = await response.json();
-        container.innerHTML = "";
-
-        workspaces.forEach(ws => {
-            const label = document.createElement("label");
-            label.className = "workspace-checkbox-item";
-            label.style.margin = "0";
-            label.innerHTML = `
-                <input type="checkbox" name="user_workspaces" value="${ws.id_workspace}">
-                <span>${escapeHtml(ws.nome_comercial)}</span>
-            `;
-            container.appendChild(label);
-        });
+        container.innerHTML = criarSeletorAcessoWorkspaces(workspaces, "user", null);
+        configurarSeletoresDeRelatorios(container);
     } catch (error) {
         console.error("Erro ao carregar workspaces:", error);
         container.innerHTML = "<p style='color:red;'>Erro ao carregar ambientes.</p>";
     }
+}
+
+function criarSeletorAcessoWorkspaces(workspaces, prefixo, usuario = null) {
+    return workspaces.map(ws => {
+        const idWorkspace = String(ws.id_workspace);
+        const vinculoUsuario = usuario?.workspaces?.find(
+            item => String(item.id_workspace) === idWorkspace
+        );
+        const workspaceSelecionada = usuario ? Boolean(vinculoUsuario) : false;
+        const dashboards = Array.isArray(ws.dashs) ? ws.dashs : [];
+        const dashboardsBloqueados = new Set(
+            (vinculoUsuario?.dashboards_bloqueados || []).map(String)
+        );
+        const nomeCheckboxWorkspace = usuario
+            ? `${prefixo}_workspaces`
+            : "user_workspaces";
+
+        const dashboardsHTML = dashboards.length
+            ? dashboards.map(dashboard => {
+                const idDashboard = String(dashboard.id_dashboard);
+                const permitido = !vinculoUsuario || !dashboardsBloqueados.has(idDashboard);
+                return `
+                    <label style="display:flex; align-items:center; gap:8px; padding:4px 0; font-size:12px; color:var(--text-muted);">
+                        <input type="checkbox" name="${prefixo}_dashboards_${idWorkspace}" value="${escapeHtml(idDashboard)}"
+                            ${permitido ? "checked" : ""} ${workspaceSelecionada ? "" : "disabled"}
+                            style="width:14px; height:14px; accent-color:var(--primary);">
+                        <span>${escapeHtml(dashboard.nome_dashboard || "")}</span>
+                    </label>`;
+            }).join("")
+            : "<span style='font-size:12px; color:var(--text-muted);'>Nenhum relatório vinculado.</span>";
+
+        return `
+            <section style="border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:10px;">
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--text-main);">
+                    <input type="checkbox" name="${nomeCheckboxWorkspace}" value="${escapeHtml(idWorkspace)}"
+                        ${workspaceSelecionada ? "checked" : ""}
+                        style="width:16px; height:16px; accent-color:var(--primary);">
+                    <span>${escapeHtml(ws.nome_comercial || "")}</span>
+                </label>
+                <div style="margin:8px 0 0 24px; padding-left:10px; border-left:2px solid var(--border-color);">
+                    ${dashboardsHTML}
+                </div>
+            </section>`;
+    }).join("");
+}
+
+function configurarSeletoresDeRelatorios(container) {
+    container.querySelectorAll('input[name$="_workspaces"]').forEach(checkboxWorkspace => {
+        checkboxWorkspace.addEventListener("change", () => {
+            const section = checkboxWorkspace.closest("section");
+            if (!section) return;
+            section.querySelectorAll('input[type="checkbox"][name*="_dashboards_"]').forEach(checkboxDashboard => {
+                checkboxDashboard.disabled = !checkboxWorkspace.checked;
+            });
+        });
+    });
+}
+
+function coletarDashboardsBloqueados(prefixo, workspacesIds) {
+    const dashboardsBloqueados = {};
+    workspacesIds.forEach(idWorkspace => {
+        const desmarcados = document.querySelectorAll(
+            `input[name="${prefixo}_dashboards_${idWorkspace}"]:not(:checked)`
+        );
+        dashboardsBloqueados[idWorkspace] = Array.from(desmarcados).map(checkbox => checkbox.value);
+    });
+    return dashboardsBloqueados;
 }
 
 // ------------------------------------------------------------
@@ -1839,9 +1967,73 @@ function desenharLinhasUsuarios(usuariosParaDesenhar = listaUsuariosCarregados) 
             </td>
         `;
 
+        const acoes = tr.querySelector("td:last-child");
+        const btnExcluir = document.createElement("button");
+        btnExcluir.type = "button";
+        btnExcluir.className = "btn-action-delete-version";
+        btnExcluir.textContent = "Excluir usuário";
+        btnExcluir.style.marginLeft = "8px";
+        const usuarioPadrao = String(user.ldap || "").trim().toLowerCase() === "admin";
+        if (usuarioPadrao) {
+            btnExcluir.disabled = true;
+            btnExcluir.title = "O usuário padrão admin não pode ser excluído.";
+        } else {
+            btnExcluir.addEventListener("click", event => {
+                event.stopPropagation();
+                abrirModalExclusaoUsuario(user);
+            });
+        }
+        acoes.appendChild(btnExcluir);
+
         tr.addEventListener("click", () => toggleAuditoriaUsuarioInline(user, tr));
         tbody.appendChild(tr);
     });
+}
+
+function configurarExclusaoUsuario() {
+    const modal = document.getElementById("deleteUserModal");
+    if (!modal) return;
+
+    document.getElementById("btnCloseDeleteUser")?.addEventListener("click", fecharModalExclusaoUsuario);
+    document.getElementById("btnCancelDeleteUser")?.addEventListener("click", fecharModalExclusaoUsuario);
+    document.getElementById("btnConfirmDeleteUser")?.addEventListener("click", confirmarExclusaoUsuario);
+}
+
+function abrirModalExclusaoUsuario(user) {
+    idUsuarioSelecionadoParaExcluir = user.id_usuario;
+    document.getElementById("deleteUserNome").textContent = user.nome || user.ldap || "";
+    document.getElementById("deleteUserModal")?.classList.add("show");
+}
+
+function fecharModalExclusaoUsuario() {
+    document.getElementById("deleteUserModal")?.classList.remove("show");
+    idUsuarioSelecionadoParaExcluir = null;
+}
+
+async function confirmarExclusaoUsuario() {
+    if (!idUsuarioSelecionadoParaExcluir) return;
+
+    const idUsuario = idUsuarioSelecionadoParaExcluir;
+    const botaoConfirmar = document.getElementById("btnConfirmDeleteUser");
+    if (botaoConfirmar) botaoConfirmar.disabled = true;
+
+    try {
+        const response = await fetch("/api/usuarios/excluir", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id_usuario: idUsuario })
+        });
+        const resultado = await response.json();
+        if (!response.ok) throw new Error(resultado.error || "Erro ao excluir o usuário.");
+
+        fecharModalExclusaoUsuario();
+        exibirNotificacaoSucesso("Usuário e vínculos com workspaces excluídos com sucesso.");
+        await renderizarTabelaUsuarios();
+    } catch (error) {
+        exibirNotificacaoErro(error.message || "Falha de comunicação com o servidor.");
+    } finally {
+        if (botaoConfirmar) botaoConfirmar.disabled = false;
+    }
 }
 
 function filtrarTabelaUsuarios() {
@@ -1957,20 +2149,16 @@ async function ativarModoEdicaoUsuario(idUsuario, event) {
     let opcoesWorkspacesHTML = "";
     try {
         const resWS = await fetch('/api/workspaces');
+        if (!resWS.ok) throw new Error(`O servidor retornou o status ${resWS.status}`);
         const todasWorkspaces = await resWS.json();
-        const idsWssDoUsuario = user.workspaces ? user.workspaces.map(w => w.id_workspace) : [];
-
-        todasWorkspaces.forEach(ws => {
-            const estaVinculado = idsWssDoUsuario.includes(ws.id_workspace) ? "checked" : "";
-            opcoesWorkspacesHTML += `
-                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer;">
-                    <input type="checkbox" name="edit_user_ws_${idUsuario}" value="${ws.id_workspace}" ${estaVinculado} style="width:16px; height:16px; accent-color:var(--primary);">
-                    <span>${escapeHtml(ws.nome_comercial)}</span>
-                </label>
-            `;
-        });
+        opcoesWorkspacesHTML = criarSeletorAcessoWorkspaces(
+            todasWorkspaces,
+            `edit_user_${idUsuario}`,
+            user
+        );
     } catch (err) {
-        opcoesWorkspacesHTML = "<p style='color:red; font-size:12px;'>Falha ao carregar ambientes.</p>";
+        console.error("Erro ao carregar workspaces e relatórios do usuário:", err);
+        opcoesWorkspacesHTML = "<p style='color:red; font-size:12px;'>Falha ao carregar workspaces e relatórios.</p>";
     }
 
     container.innerHTML = `
@@ -1999,7 +2187,8 @@ async function ativarModoEdicaoUsuario(idUsuario, event) {
             </div>
 
             <div class="form-group" style="margin-bottom: 20px;">
-                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom: 6px; display:block;">Vincular Workspaces</label>
+                <label style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom: 6px; display:block;">Acesso às workspaces e relatórios</label>
+                <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px;">Ao liberar uma workspace, todos os relatórios ficam acessíveis por padrão. Desmarque relatórios específicos para bloqueá-los.</p>
                 <div style="background-color:#f8fafc; border:1px solid var(--border-color); padding:14px; border-radius:6px; display:grid; grid-template-columns:1fr 1fr; gap:10px; max-height:180px; overflow-y:auto;">
                     ${opcoesWorkspacesHTML}
                 </div>
@@ -2011,6 +2200,7 @@ async function ativarModoEdicaoUsuario(idUsuario, event) {
             </div>
         </div>
     `;
+    configurarSeletoresDeRelatorios(container);
 }
 
 function restaurarTelaAuditoriaUsuario(idUsuario, event) {
@@ -2029,8 +2219,12 @@ async function salvarEdicaoUsuario(idUsuario, event) {
     const novoEmail = document.getElementById(`edit-user-email-${idUsuario}`).value.trim();
     const novoPapel = document.getElementById(`edit-user-role-${idUsuario}`).value;
     
-    const checkboxes = document.querySelectorAll(`input[name="edit_user_ws_${idUsuario}"]:checked`);
+    const checkboxes = document.querySelectorAll(`input[name="edit_user_${idUsuario}_workspaces"]:checked`);
     const listaWorkspacesIds = Array.from(checkboxes).map(cb => cb.value);
+    const dashboardsBloqueados = coletarDashboardsBloqueados(
+        `edit_user_${idUsuario}`,
+        listaWorkspacesIds
+    );
 
     if (!novoNome) {
         exibirNotificacaoErro("O Nome é obrigatório.");
@@ -2046,7 +2240,8 @@ async function salvarEdicaoUsuario(idUsuario, event) {
                 nome: novoNome,
                 email: novoEmail,
                 papel: parseInt(novoPapel),
-                id_workspaces: listaWorkspacesIds
+                id_workspaces: listaWorkspacesIds,
+                dashboards_bloqueados: dashboardsBloqueados
             })
         });
 
@@ -2058,7 +2253,8 @@ async function salvarEdicaoUsuario(idUsuario, event) {
                 if (trPai) trPai.click(); 
             }, 250);
         } else {
-            exibirNotificacaoErro("Erro interno ao salvar alterações cadastrais.");
+            const erro = await response.json();
+            exibirNotificacaoErro(erro.error || "Erro interno ao salvar alterações cadastrais.");
         }
     } catch (error) {
         exibirNotificacaoErro("Falha de comunicação com o servidor Python.");
